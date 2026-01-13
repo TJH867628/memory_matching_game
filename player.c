@@ -1,0 +1,82 @@
+#include "shared_state.h"
+#include "logger.h"
+#include "player.h"
+#include <stdio.h>
+#include <unistd.h>
+
+
+void handlePlayer(SharedGameState *gameState, int i){
+    while(serverRunning){
+        sem_wait(&gameState->turnSemaphore);
+
+        pthread_mutex_lock(&gameState->mutex);
+        printf("CurrentTurn :%d\n",gameState->currentTurn);
+        if(!gameState->players[i].connected || !gameState->gameStarted || gameState->currentTurn != i) {
+            pthread_mutex_unlock(&gameState->mutex);
+            continue;
+        }
+        pthread_mutex_unlock(&gameState->mutex);
+    
+        PlayerAction action = getPlayerAction(i);
+
+        applyAction(gameState,action);
+        sem_post(&gameState->turnCompleteSemaphore);
+        
+    }
+    _exit(0);
+}
+
+bool allConnectedPlayerReady(SharedGameState *gameState){
+    bool ready = true;
+    pthread_mutex_lock(&gameState->mutex);
+    if(gameState->playerCount == 0) ready = false;
+
+    for(int i = 0; i < MAX_PLAYERS; i++){
+        if(gameState->players[i].connected && !gameState->players[i].readyToStart){
+            ready = false;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&gameState->mutex);
+
+    return ready;
+}
+
+PlayerAction getPlayerAction(int playerID){
+    PlayerAction action;
+
+    action.type = ACTION_FLIP;
+    action.cardIndex = 1;
+    action.playerID = playerID;
+    switch(action.type){
+        case ACTION_FLIP:
+            printf("Receive flip action from player %d\n", playerID);
+            break;
+        default:
+            break;
+    }
+    sleep(1);
+
+    return action;
+}
+
+void applyAction(SharedGameState *gameState, PlayerAction action){
+    pthread_mutex_lock(&gameState->mutex);
+
+    switch(action.type){
+        case ACTION_FLIP:
+            int cardIndex = action.cardIndex;
+            if(cardIndex >= 0 && cardIndex < MAX_CARDS){
+                //card flip logic here
+
+                char msg[LOG_MSG_LENGTH];
+                snprintf(msg, LOG_MSG_LENGTH, "Player %d flipped card %d\n", action.playerID, action.cardIndex);
+                pushLogEvent(gameState,LOG_GAME,msg);
+            }
+            break;
+        default:
+            break;
+    }
+    pthread_mutex_unlock(&gameState->mutex);
+    
+}
