@@ -1,11 +1,24 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 
 #define SERVER_PORT 8080
 #define BUFFER_SIZE 128
+
+bool checkServerConnection(int sock){
+    char temp;
+    int bytes = recv(sock, &temp, 1, 0);
+    if(bytes <= 0){
+        printf("Server is not responding. Exiting. \n");
+        close(sock);
+        return false;
+    }
+
+    return true;
+}
 
 int main() {
     int sock;
@@ -28,26 +41,24 @@ int main() {
         exit(1);
     }
 
-    printf("Connected to server.\n");
-
     /* ===== WAIT FOR SERVER PROMPT ===== */
     memset(buffer, 0, sizeof(buffer));
-    recv(sock, buffer, sizeof(buffer) - 1, 0);
-    printf("%s", buffer); 
+    int bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
+    printf("%s\n", buffer); 
 
     /* ===== READY PHASE ===== */
     while (1) {
+        printf("Please type 1 to READY\n");
         fgets(buffer, sizeof(buffer), stdin);
-
+        
         if (buffer[0] != '1') {
-            printf("Please type 1 to READY\n");
+            if(!checkServerConnection(sock)) return;
             continue;
         }
 
-        send(sock, buffer, strlen(buffer), 0);
-
+        if(!checkServerConnection(sock)) return;
         memset(buffer, 0, sizeof(buffer));
-        recv(sock, buffer, sizeof(buffer) - 1, 0);
+        
         printf("%s", buffer);   
 
         break;
@@ -56,8 +67,15 @@ int main() {
     /* ===== WAIT FOR GAME START ===== */
     while (1) {
         memset(buffer, 0, sizeof(buffer));
-        recv(sock, buffer, sizeof(buffer) - 1, 0);
         printf("%s", buffer);
+
+        int bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
+
+        if (bytes <= 0) {
+            printf("Disconnected from server.\n");
+            close(sock);
+            return 0;
+        }
 
         if (strstr(buffer, "Game started") != NULL)
             break;
@@ -75,7 +93,8 @@ int main() {
 
         if (bytes <= 0) {
             printf("Disconnected from server.\n");
-            break;
+            close(sock);
+            return 0;
         }
 
         printf("%s", buffer);

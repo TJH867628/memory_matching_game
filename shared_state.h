@@ -87,7 +87,7 @@ typedef struct{
 
 typedef enum{
     ACTION_FLIP,
-    ACITON_JOIN,
+    ACTION_JOIN,
     ACTION_READY,
     ACTION_QUIT
 }PlayerActionType;
