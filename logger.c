@@ -6,7 +6,7 @@
 #include <string.h>
 #include <time.h>
 
-void* loggerThread(void *arg){
+void* loggerThreadFunc(void *arg){
     SharedGameState *gameState = (SharedGameState*) arg;
     
     //open game.log fileS *gamegameState = 
@@ -61,7 +61,7 @@ void* loggerThread(void *arg){
         sem_post(&gameState->logSpacesSemaphore);//Signal that there is space in the log queue
     }
 
-    fprintf(logFile,"[SERVER] Server shutdown.");
+    fprintf(logFile,"[SERVER] Server shutdown.\n");
     fclose(logFile);
     return NULL;
 }

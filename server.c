@@ -2,133 +2,248 @@
 #include <stdlib.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
 #include <signal.h>
 #include <string.h>
-#include <errno.h>
 
 #include "shared_state.h"
 #include "scheduler.h"
 #include "logger.h"
 #include "player.h"
+#include "score.h"
+
+#define SERVER_PORT 8080
+#define MAX_CLIENTS 5
 
 int sharedMemoryID;
 SharedGameState *gameState;
 volatile bool serverRunning = true;
+volatile sig_atomic_t shuttingDown = 0;
 
-void cleanup(int sig){
-    printf("Server shutting down...\n");
+/* ---------------- TCP SETUP ---------------- */
+
+int setupServerSocket() {
+    int server_fd;
+    struct sockaddr_in address;
+
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        perror("Socket failed");
+        exit(1);
+    }
+
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(SERVER_PORT);
+
+    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        exit(1);
+    }
+
+    if (listen(server_fd, MAX_CLIENTS) < 0) {
+        perror("Listen failed");
+        exit(1);
+    }
+
+    printf("Server listening on port %d...\n", SERVER_PORT);
+    return server_fd;
+}
+
+/* ---------------- CLEANUP ---------------- */
+
+void cleanup(int sig) {
+    serverRunning = 0;
+    printf("\nShutting down server...\n");
+
+    scores_save(gameState);
 
     sem_destroy(&gameState->turnSemaphore);
     sem_destroy(&gameState->turnCompleteSemaphore);
     sem_destroy(&gameState->logReadySemaphore);
-    sem_destroy(&gameState->turnCompleteSemaphore);
+    sem_destroy(&gameState->logItemsSemaphore);
+    sem_destroy(&gameState->logSpacesSemaphore);
+
     pthread_mutex_destroy(&gameState->mutex);
+    pthread_mutex_destroy(&gameState->logQueueMutex);
 
     shmdt(gameState);
     shmctl(sharedMemoryID, IPC_RMID, NULL);
-    printf("Cleaned up shared memory and semaphores.\n");
 
+    printf("Server shutdown complete.\n");
     exit(0);
 }
 
-int main(){
-    key_t key = ftok("server.c", 65);
+void handleTCPClient(int sock, SharedGameState *gameState)
+{
+    char buffer[128];
+    int playerID;
+    int readyHandled = 0;
 
-    sharedMemoryID = shmget(key, sizeof(SharedGameState), 0666|IPC_CREAT);//Size of - calcute the size needed for shared memory, 0666 - read and write permission, IPC_CREAT - create if not exists
-    if(sharedMemoryID == -1){
-        perror("Shared Memory get failed");
-        exit(1);
-    }
+    /* Assign player */
+    pthread_mutex_lock(&gameState->mutex);
+    playerID = gameState->playerCount;
+    gameState->players[playerID].playerID = playerID;
+    gameState->players[playerID].connected = true;
+    gameState->players[playerID].readyToStart = false;
+    gameState->playerCount++;
+    pthread_mutex_unlock(&gameState->mutex);
 
-    gameState = (SharedGameState*) shmat(sharedMemoryID, NULL, 0);//Connect the program to the shared memory
-    if(gameState == (void*) -1){
-        perror("Shared Memory attach failed");
-        exit(1);
-    }
+    char msg[LOG_MSG_LENGTH];
+    snprintf(msg, LOG_MSG_LENGTH, "Player %d connected\n", playerID);
+    pushLogEvent(gameState, LOG_PLAYER, msg);
 
-    printf("Initializing system environment...\n");
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);//Prepare the mutex attribute
-    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);//Allow the mutex to shared between processes
-    pthread_mutex_init(&gameState->mutex, &attr);//Create the mutex in shared memory
+    send(sock, "Type 1 to READY\n", 17, 0);
 
-    pthread_mutex_lock(&gameState->mutex);//Lock the mutex to initialize the game state safely
-    initGameState(gameState);
-    pthread_mutex_unlock(&gameState->mutex);//Unlock the mutex after initialization
+    /* ================= MAIN LOOP ================= */
+    while (serverRunning) {
 
-    sem_init(&gameState->turnSemaphore, 1, 0);//Create semaphore in shared memory, 1 - shared between processes, only one player can do things at a time
-    sem_init(&gameState->turnCompleteSemaphore, 1, 0);//Create turn complete semaphore in shared memory, 1 - shared between processes, wait until turn is complete
+        memset(buffer, 0, sizeof(buffer));
+        int bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
 
-    pthread_mutexattr_t logAttr;
-    pthread_mutexattr_init(&logAttr);//Prepare the mutex logAttribute
-    pthread_mutexattr_setpshared(&logAttr, PTHREAD_PROCESS_SHARED);//Allow the mutex to shared between processes
-    pthread_mutex_init(&gameState->logQueueMutex, &logAttr);//Create the log queue mutex in shared memory
-    sem_init(&gameState->logReadySemaphore, 1, 0);//Create log ready semaphore in shared memory, 1 - shared between processes, initial value 0
-    sem_init(&gameState->logItemsSemaphore, 1, 0);//Create log items semaphore in shared memory, 1 - shared between processes, initial value 0
-    sem_init(&gameState->logSpacesSemaphore, 1, LOG_QUEUE_SIZE);//Create log spaces semaphore in shared memory, 1 - shared between processes, initial value LOG_QUEUE_SIZE
-    printf("System environment initialized complete\n");
-    pushLogEvent(gameState,LOG_SERVER,"Server environment initialized\n");
-    pthread_t loggerThreadID;
-    pthread_create(&loggerThreadID, NULL, loggerThread, gameState);
-    sem_wait(&gameState->logReadySemaphore);//Wait log thread ready
-
-    printf("Waiting for player to join...\n");
-    gameState->players[0].wantToJoin = true;
-    gameState->players[0].readyToStart = true;
-    gameState->players[1].wantToJoin = true;
-    gameState->players[1].readyToStart = true;
-    //Waiting for player to join
-    while(!gameState->gameStarted){
-        printf("gameStarted = %d\n", gameState->gameStarted);printf(&gameState->gameStarted);
-        if(gameState->playerCount == MAX_PLAYERS){
-            printf("Players are full");
-        }else{
-            for(int i=0; i < MAX_PLAYERS; i++){
-                if(gameState->players[i].wantToJoin && !gameState->players[i].connected){
-                    pid_t pid = fork();
-                    
-                    if(pid == 0){
-                        //child
-                        handlePlayer(gameState,i);
-                        _exit(0);
-                    }
-
-                    gameState->players[i].connected = true;
-                    gameState->players[i].pid = pid;
-                    gameState->players[i].playerID = i;
-                    gameState->playerCount++;
-                    char playerConnectMessage[LOG_MSG_LENGTH];
-                    snprintf(playerConnectMessage, LOG_MSG_LENGTH,"Player %d joined\n", i);
-                    pushLogEvent(gameState,LOG_PLAYER,playerConnectMessage);
-                }
-            }   
+        if (bytes <= 0) {
+            printf("Player %d disconnected\n", playerID);
+            break;
         }
 
-        if(allConnectedPlayerReady(gameState)){
-            if(gameState->playerCount < 2){
-                printf("Minimum player is 2, cannot start\n");
-                sleep(2);
-                continue;
+        /* ========== READY ========= */
+        if (!readyHandled &&
+            (strcmp(buffer, "1\n") == 0 || strcmp(buffer, "1") == 0)) {
+
+            pthread_mutex_lock(&gameState->mutex);
+            gameState->players[playerID].readyToStart = true;
+            readyHandled = 1;
+
+            int readyCount = 0;
+            for (int i = 0; i < gameState->playerCount; i++) {
+                if (gameState->players[i].connected &&
+                    gameState->players[i].readyToStart)
+                    readyCount++;
             }
-            gameState->gameStarted = true;
+            pthread_mutex_unlock(&gameState->mutex);
+
+            char logMsg[LOG_MSG_LENGTH];
+            snprintf(logMsg, LOG_MSG_LENGTH,
+                     "Player %d is READY\n", playerID);
+            pushLogEvent(gameState, LOG_PLAYER, logMsg);
+
+            send(sock, "READY received\n", 15, 0);
+
+            /* Tell client to wait */
+            if (!gameState->gameStarted) {
+                send(sock, "Waiting for other players...\n", 30, 0);
+            }
+
+            /* Start game when >= 2 ready */
+            if (!gameState->gameStarted && readyCount >= 2) {
+                gameState->gameStarted = true;
+
+                pushLogEvent(gameState, LOG_GAME,
+                             "Game started\n");
+
+                if (!gameState->gameStarted && readyCount >= 2) {
+                    gameState->gameStarted = true;
+
+                    pushLogEvent(gameState, LOG_GAME,
+                                "Game started\n");
+
+                    send(sock, "Game started\n", 13, 0);
+                }
+            }
+            continue;
         }
 
-        sleep(2);
+        /* ===== BLOCK UNTIL GAME STARTS ===== */
+        if (!gameState->gameStarted)
+            continue;
+
+        /* ===== GAME COMMAND ===== */
+        if (strncmp(buffer, "FLIP", 4) == 0) {
+            int card;
+            sscanf(buffer, "FLIP %d", &card);
+
+            PlayerAction action;
+            action.type = ACTION_FLIP;
+            action.cardIndex = card;
+            action.playerID = playerID;
+
+            applyAction(gameState, action);
+            sem_post(&gameState->turnCompleteSemaphore);
+        }
+        else {
+            send(sock, "Invalid command\n", 16, 0);
+        }
     }
 
-    pthread_t schedulerThreadID;
-    pthread_create(&schedulerThreadID, NULL, schedulerThread,gameState);
-    printf("Scheduler start\n");
-
-    pushLogEvent(gameState,LOG_GAME,"Game Started, Player 0 go first\n");
-    sem_post(&gameState->turnSemaphore);
-
-    signal(SIGINT, cleanup);
-    while (1) {
-        sleep(1);
-    }
+    close(sock);
 }
 
+/* ---------------- MAIN ---------------- */
+int main() {
+
+    key_t key = ftok("server.c", 65);
+    sharedMemoryID = shmget(key, sizeof(SharedGameState), 0666 | IPC_CREAT);
+    gameState = (SharedGameState*) shmat(sharedMemoryID, NULL, 0);
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+    pthread_mutex_init(&gameState->mutex, &attr);
+
+    pthread_mutex_lock(&gameState->mutex);
+    initGameState(gameState);
+    pthread_mutex_unlock(&gameState->mutex);
+
+    scores_init(gameState);
+    scores_load(gameState);
+
+    sem_init(&gameState->turnSemaphore, 1, 0);
+    sem_init(&gameState->turnCompleteSemaphore, 1, 0);
+    sem_init(&gameState->logReadySemaphore, 1, 0);
+    sem_init(&gameState->logItemsSemaphore, 1, 0);
+    sem_init(&gameState->logSpacesSemaphore, 1, LOG_QUEUE_SIZE);
+
+    pthread_mutexattr_t logAttr;
+    pthread_mutexattr_init(&logAttr);
+    pthread_mutexattr_setpshared(&logAttr, PTHREAD_PROCESS_SHARED);
+    pthread_mutex_init(&gameState->logQueueMutex, &logAttr);
+
+    pthread_t loggerThread;
+    pthread_create(&loggerThread, NULL, loggerThreadFunc, gameState);
+    sem_wait(&gameState->logReadySemaphore);
+
+    int serverSocket = setupServerSocket();
+    signal(SIGINT, cleanup);
+
+    printf("Waiting for players...\n");
+
+    while (1) {
+        struct sockaddr_in clientAddr;
+        socklen_t len = sizeof(clientAddr);
+
+        int clientSocket = accept(serverSocket,
+                                  (struct sockaddr*)&clientAddr,
+                                  &len);
+
+        if (clientSocket < 0)
+            continue;
+
+        pid_t pid = fork();
+
+        if (pid == 0) {
+            signal(SIGINT, SIG_IGN);
+            handleTCPClient(clientSocket, gameState);
+            exit(0);
+        }
+
+        close(clientSocket);
+    }
+}

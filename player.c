@@ -1,12 +1,30 @@
 #include "shared_state.h"
 #include "logger.h"
 #include "player.h"
+#include "score.h"
 #include <stdio.h>
 #include <unistd.h>
 
+int countReadyPlayers(SharedGameState *gameState)
+{
+    int count = 0;
+
+    for (int i = 0; i < gameState->playerCount; i++) {
+        if (gameState->players[i].readyToStart)
+            count++;
+    }
+
+    return count;
+}
 
 void handlePlayer(SharedGameState *gameState, int i){
+
     while(serverRunning){
+        if (!gameState->gameStarted) {
+            sleep(1);
+            continue;
+        }
+
         sem_wait(&gameState->turnSemaphore);
 
         pthread_mutex_lock(&gameState->mutex);
@@ -64,16 +82,32 @@ void applyAction(SharedGameState *gameState, PlayerAction action){
     pthread_mutex_lock(&gameState->mutex);
 
     switch(action.type){
-        case ACTION_FLIP:
+        case ACTION_FLIP: {
             int cardIndex = action.cardIndex;
-            if(cardIndex >= 0 && cardIndex < MAX_CARDS){
-                //card flip logic here
+
+            if (cardIndex >= 0 && cardIndex < MAX_CARDS) {
+
+                // Simulate card flip
+                gameState->cards[cardIndex].isFlipped = true;
+
+                // Example match logic (simplified)
+                if (!gameState->cards[cardIndex].isMatched) {
+                    gameState->cards[cardIndex].isMatched = true;
+                    gameState->matchedPaires++;
+                }
 
                 char msg[LOG_MSG_LENGTH];
-                snprintf(msg, LOG_MSG_LENGTH, "Player %d flipped card %d\n", action.playerID, action.cardIndex);
-                pushLogEvent(gameState,LOG_GAME,msg);
+                snprintf(msg, LOG_MSG_LENGTH,
+                        "Player %d flipped card %d (Matched: %d/%d)\n",
+                        action.playerID,
+                        cardIndex,
+                        gameState->matchedPaires,
+                        gameState->totalPairs);
+
+                pushLogEvent(gameState, LOG_GAME, msg);
             }
             break;
+        }
         default:
             break;
     }

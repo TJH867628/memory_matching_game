@@ -24,12 +24,26 @@ typedef struct{
 //Player
 typedef struct{
     int playerID;
+    int socket;
     int score;
     pid_t pid;
     bool connected;
     bool wantToJoin;
     bool readyToStart;
 }Player;
+
+// Persistent Score Entry
+typedef struct {
+    int playerID;
+    int wins;
+} ScoreEntry;
+
+// Score Table
+typedef struct {
+    ScoreEntry entries[MAX_PLAYERS];
+    int count;
+    pthread_mutex_t scoreMutex;
+} scoreBoard;
 
 //Log Event Type
 typedef enum{
@@ -68,11 +82,13 @@ typedef struct{
     int matchedPaires;
     Player players[MAX_PLAYERS];
     Card cards[MAX_CARDS];
+    scoreBoard scoreBoard;
 }SharedGameState;
 
 typedef enum{
     ACTION_FLIP,
     ACITON_JOIN,
+    ACTION_READY,
     ACTION_QUIT
 }PlayerActionType;
 
