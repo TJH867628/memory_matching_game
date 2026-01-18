@@ -8,15 +8,14 @@
 #define SERVER_PORT 8080
 #define BUFFER_SIZE 128
 
-bool checkServerConnection(int sock){
+bool checkServerConnection(int sock) {
     char temp;
-    int bytes = recv(sock, &temp, 1, 0);
-    if(bytes <= 0){
-        printf("Server is not responding. Exiting. \n");
+    int bytes = recv(sock, &temp, 1, MSG_PEEK); 
+    if (bytes <= 0) {
+        printf("Server is not responding. Exiting.\n");
         close(sock);
         return false;
     }
-
     return true;
 }
 
@@ -25,50 +24,48 @@ int main() {
     struct sockaddr_in serverAddr;
     char buffer[BUFFER_SIZE];
 
+    /* ===== CREATE SOCKET ===== */
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         perror("Socket creation failed");
         exit(1);
     }
 
+    /* ===== SERVER ADDRESS ===== */
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(SERVER_PORT);
     serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    if (connect(sock, (struct sockaddr*)&serverAddr,
-                sizeof(serverAddr)) < 0) {
+    /* ===== CONNECT ===== */
+    if (connect(sock, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
         perror("Connection failed");
+        close(sock);
         exit(1);
     }
 
-    /* ===== WAIT FOR SERVER PROMPT ===== */
+    /* ===== RECEIVE WELCOME MESSAGE ===== */
     memset(buffer, 0, sizeof(buffer));
-    int bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
-    printf("%s\n", buffer); 
+    recv(sock, buffer, sizeof(buffer) - 1, 0);
+    printf("%s\n", buffer);
 
     /* ===== READY PHASE ===== */
     while (1) {
-        printf("Please type 1 to READY\n");
+        printf("Please type 1 to READY: ");
         fgets(buffer, sizeof(buffer), stdin);
-        
+
         if (buffer[0] != '1') {
-            if(!checkServerConnection(sock)) return;
+            if (!checkServerConnection(sock)) return 0;
             continue;
         }
 
-        if(!checkServerConnection(sock)) return;
-        memset(buffer, 0, sizeof(buffer));
-        
-        printf("%s", buffer);   
-
+        /* Send READY to server */
+        send(sock, buffer, strlen(buffer), 0);
         break;
     }
 
     /* ===== WAIT FOR GAME START ===== */
     while (1) {
         memset(buffer, 0, sizeof(buffer));
-        printf("%s", buffer);
-
         int bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
 
         if (bytes <= 0) {
@@ -77,7 +74,10 @@ int main() {
             return 0;
         }
 
-        if (strstr(buffer, "Game started") != NULL)
+        printf("%s", buffer);
+
+        if (strstr(buffer, "Game Started") != NULL ||
+            strstr(buffer, "Game started") != NULL)
             break;
     }
 
@@ -93,8 +93,7 @@ int main() {
 
         if (bytes <= 0) {
             printf("Disconnected from server.\n");
-            close(sock);
-            return 0;
+            break;
         }
 
         printf("%s", buffer);
