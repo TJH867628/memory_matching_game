@@ -64,7 +64,7 @@ PlayerAction getPlayerAction(int playerID){
     PlayerAction action;
 
     action.type = ACTION_FLIP;
-    action.cardIndex = 1;
+    action.cardIndex = 1; 
     action.playerID = playerID;
     switch(action.type){
         case ACTION_FLIP:
@@ -84,17 +84,26 @@ void applyAction(SharedGameState *gameState, PlayerAction action){
     switch(action.type){
         case ACTION_FLIP: {
             int cardIndex = action.cardIndex;
+            int numOfFlip = 0;
+
+            while(numOfFlip < 3){
 
             if (cardIndex >= 0 && cardIndex < MAX_CARDS) {
 
                 // Simulate card flip
                 gameState->cards[cardIndex].isFlipped = true;
+                numOfFlip++;
+            }
 
-                // Example match logic (simplified)
-                if (!gameState->cards[cardIndex].isMatched) {
-                    gameState->cards[cardIndex].isMatched = true;
+            while(numOfFlip == 2){
+                // Check for match
+                int firstIndex = gameState->players[action.playerID].firstFlipIndex;
+                int secondIndex = gameState->players[action.playerID].secondFlipIndex;
+                if(firstIndex == secondIndex){
+                    gameState->cards[firstIndex].isMatched = true;
                     gameState->matchedPaires++;
                 }
+            }
 
                 char msg[LOG_MSG_LENGTH];
                 snprintf(msg, LOG_MSG_LENGTH,
