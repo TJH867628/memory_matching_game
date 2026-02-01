@@ -30,6 +30,10 @@ typedef struct{
     bool connected;
     bool wantToJoin;
     bool readyToStart;
+    bool pendingAction;
+    int pendingCardIndex;
+    int firstFlipIndex;
+    int secondFlipIndex;
 }Player;
 
 // Persistent Score Entry
@@ -67,7 +71,7 @@ typedef struct{
     sem_t logReadySemaphore;
 
     LogEvent logQueue[LOG_QUEUE_SIZE];
-    int logQueueHead;;
+    int logQueueHead;
     int logQueueTail;
     pthread_mutex_t logQueueMutex;
     sem_t logItemsSemaphore;//Use to signal there is items in the log queue
@@ -101,5 +105,6 @@ typedef struct{
 void initGameState(SharedGameState *state);
 void resetGameState(SharedGameState *state);
 void printGameState(SharedGameState *state);
+void setupBoard(SharedGameState *state, int rows, int cols);
 
 #endif

@@ -134,7 +134,8 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
                     }
                 }
             }
-
+            
+            //change to >= 3 later
             if (connectedCount >= 2 && readyCount == connectedCount) {
                 gameState->gameStarted = true;
                 pushLogEvent(gameState, LOG_GAME, "Game Started\n");

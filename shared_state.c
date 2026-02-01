@@ -1,5 +1,7 @@
 #include "shared_state.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 void initGameState(SharedGameState *state){
     state->gameStarted = false;
@@ -18,6 +20,10 @@ void initGameState(SharedGameState *state){
         state->players[i].connected = false;
         state->players[i].wantToJoin = false;
         state->players[i].readyToStart = false;
+        state->players[i].pendingAction = false;
+        state->players[i].pendingCardIndex = -1;
+        state->players[i].firstFlipIndex = -1;
+        state->players[i].secondFlipIndex = -1;
     }
 
     for(int i = 0; i < MAX_CARDS; i++){
@@ -35,6 +41,10 @@ void resetGameState(SharedGameState *state){
 
     for(int i = 0; i < state->playerCount; i++){
         state->players[i].score = 0;
+        state->players[i].pendingAction = false;
+        state->players[i].pendingCardIndex = -1;
+        state->players[i].firstFlipIndex = -1;
+        state->players[i].secondFlipIndex = -1;
     }
 
     for(int i = 0; i < state->totalPairs * 2; i++){
@@ -43,6 +53,37 @@ void resetGameState(SharedGameState *state){
     }
 }
 
+void setupBoard(SharedGameState *state, int rows, int cols){
+    state->boardRows = rows;
+    state->boardCols = cols;
+    int totalCards = rows * cols;
+
+    if (totalCards > MAX_CARDS || totalCards % 2 != 0) {
+        printf("error occured!\n");
+        return;
+    }
+
+    state->totalPairs = totalCards / 2;
+
+    int cardIndex = 0;
+    for (int fv = 0; fv < state->totalPairs; fv++) {
+        for (int pairC = 0; pairC < 2; pairC++) {
+            state->cards[cardIndex].cardID = cardIndex;
+            state->cards[cardIndex].faceValue = fv;
+            state->cards[cardIndex].isFlipped = false;
+            state->cards[cardIndex].isMatched = false;
+            cardIndex++;
+        }
+    }
+
+    srand((unsigned int)time(NULL));
+    for (int i = 0; i < totalCards; i++) {
+        int j = rand() % totalCards;
+        Card temp = state->cards[i];
+        state->cards[i] = state->cards[j];
+        state->cards[j] = temp;
+    }
+}
 
 void printGameState(SharedGameState *state){
     printf("Game Started: %d\n", state->gameStarted);
