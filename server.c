@@ -150,20 +150,6 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
                 }
             }
             pthread_mutex_unlock(&gameState->mutex);
-
-            // change to >= 3 later
-            if (connectedCount >= 2 && readyCount == connectedCount)
-            {
-                pthread_mutex_lock(&gameState->mutex);
-                gameState->gameStarted = true;
-                gameState->currentTurn = 0;
-                pthread_mutex_unlock(&gameState->mutex);
-
-                setupBoard(gameState, 4, 6);
-                sendBoardStateToAll(gameState); 
-                printf("Connected count : %d\n", connectedCount);
-                pushLogEvent(gameState, LOG_GAME, "Game Started\n");
-            }
         }
     }
     else
@@ -248,7 +234,8 @@ void handleTCPClient(int sock, SharedGameState *gameState, int myPlayerID)
             sentWaiting = true;
         }
 
-        if (started && !sentGameStart) {
+        if (started && !sentGameStart)
+        {
             send(sock, "Game Started\n", 13, 0);
             sentGameStart = true;
         }
@@ -304,6 +291,22 @@ int main()
         int clientSocket = accept(serverSocket,
                                   (struct sockaddr *)&clientAddr,
                                   &len);
+                                  
+        int connectedCount = 0;
+        int readyCount = 0;
+        // change to >= 3 later
+        if (connectedCount >= 2 && readyCount == connectedCount)
+        {
+            pthread_mutex_lock(&gameState->mutex);
+            gameState->gameStarted = true;
+            gameState->currentTurn = 0;
+            pthread_mutex_unlock(&gameState->mutex);
+
+            setupBoard(gameState, 4, 6);
+            sendBoardStateToAll(gameState);
+            printf("Connected count : %d\n", connectedCount);
+            pushLogEvent(gameState, LOG_GAME, "Game Started\n");
+        }
 
         if (clientSocket < 0)
             continue;
