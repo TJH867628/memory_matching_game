@@ -6,6 +6,7 @@
 #include <semaphore.h>
 #include <sys/types.h>
 
+#define MIN_PLAYERS 2
 #define MAX_PLAYERS 4
 #define MAX_CARDS 24
 #define LOG_MSG_LENGTH 256
@@ -102,9 +103,17 @@ typedef struct{
     int playerID;
 }PlayerAction;
 
+typedef struct{
+    int currentPlayerID;
+    int cardIndex;
+    int totalPlayers;
+}PlayerTurn;
+
 void initGameState(SharedGameState *state);
 void resetGameState(SharedGameState *state);
 void printGameState(SharedGameState *state);
 void setupBoard(SharedGameState *state, int rows, int cols);
+void formatOfBoard(SharedGameState *state, char *buffer, size_t bufsize);
+void sendBoardStateToAll(SharedGameState *state);
 
 #endif
