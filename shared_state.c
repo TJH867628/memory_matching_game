@@ -133,38 +133,22 @@ void printGameState(SharedGameState *state){
     printf("Matched Pairs: %d\n", state->matchedPaires);
 }
 
-void formatBoard(SharedGameState *state, char *buffer, size_t bufsize){
-    if(!buffer || bufsize == 0) return;
+void sendBoardStateToAll(SharedGameState *state)
+{
+    char boardMsg[2048];
+
+    formatOfBoard(state, boardMsg, sizeof(boardMsg));
+
     pthread_mutex_lock(&state->mutex);
 
-    int rows = state->boardRows;
-    int cols = state->boardCols;
-    if(rows <= 0 || cols <= 0){
-        snprintf(buffer, bufsize, "Board not set up yet.\n");
-        pthread_mutex_unlock(&state->mutex);
-        return;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (state->players[i].connected) {
+            int sock = state->players[i].socket;   
+            if (sock > 0) {
+                send(sock, boardMsg, strlen(boardMsg), 0);
+            }
+        }
     }
 
-    size_t pos = 0;
-    pos += snprintf(buffer + pos, (pos < bufsize ? bufsize - pos : 0), "Current Board State:\n");
-    for(int r = 0; r < rows && pos < bufsize; r++){
-        for(int c = 0; c < cols && pos < bufsize; c++){
-            int idx = r * cols + c;
-            if(idx >= MAX_CARDS) continue;  
-            
-            Card *card = &state->cards[idx];
-            if(card->isMatched){
-                pos += snprintf(buffer + pos, (pos < bufsize ? bufsize - pos : 0), " [XX] ");
-            }else if(card->isFlipped){
-                pos += snprintf(buffer + pos, (pos < bufsize ? bufsize - pos : 0), " [%02d] ", card->faceValue);
-            }else{
-                pos += snprintf(buffer + pos, (pos < bufsize ? bufsize - pos : 0), " [--] ");
-            }
-            if(c < cols - 1){
-                pos += snprintf(buffer + pos, (pos < bufsize ? bufsize - pos : 0), " ");
-            }
-       }
-       pos += snprintf(buffer + pos, (pos < bufsize ? bufsize - pos : 0), "\n");
-    }
     pthread_mutex_unlock(&state->mutex);
 }

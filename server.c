@@ -287,6 +287,7 @@ int main()
                 gameState->players[i].connected = true;
                 gameState->players[i].readyToStart = false;
                 gameState->players[i].pid = -1;
+                gameState->players[i].socket = clientSocket; 
                 gameState->playerCount++;
                 break;
             }
