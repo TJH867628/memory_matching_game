@@ -54,6 +54,14 @@ int main()
     recv(sock, buffer, sizeof(buffer) - 1, 0);
     printf("%s\n", buffer);
 
+    if (strstr(buffer, "GAME_STARTED") != NULL || strstr(buffer, "Game already started") != NULL)
+    {
+        printf("\nYou cannot join this round.\n");
+        close(sock);
+        return 0;
+    }
+
+    READY_PHASE:
     /* ===== READY PHASE ===== */
     while (1)
     {
@@ -122,16 +130,28 @@ int main()
             bigBuffer[len] = '\0';
 
             char *end;
-            while ((end = strstr(bigBuffer, "<<END_BOARD>>")) != NULL)
+            while ((end = strstr(bigBuffer, "<<END>>")) != NULL)
             {
-                *end = '\0'; // terminate one full message
+                *end = '\0';
 
-                printf("\n%s\n", bigBuffer);
+                printf("%s", bigBuffer);
                 fflush(stdout);
 
-                // Move remaining data to front
-                len -= (end - bigBuffer) + strlen("<<END_BOARD>>");
-                memmove(bigBuffer, end + strlen("<<END_BOARD>>"), len);
+                if (strstr(bigBuffer, "GAME_STOPPED") != NULL)
+                {
+                    printf("\n=== GAME STOPPED ===\n");
+                    printf("Returning to READY state...\n");
+
+                    len = 0;
+                    memset(bigBuffer, 0, sizeof(bigBuffer));
+                    goto READY_PHASE;
+                    break;
+                }
+
+                
+
+                len -= (end - bigBuffer) + strlen("<<END>>");
+                memmove(bigBuffer, end + strlen("<<END>>"), len);
                 bigBuffer[len] = '\0';
             }
         }

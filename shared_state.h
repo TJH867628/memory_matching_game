@@ -35,6 +35,7 @@ typedef struct{
     int pendingCardIndex;
     int firstFlipIndex;
     int secondFlipIndex;
+    bool waitingNotified;
 }Player;
 
 // Persistent Score Entry

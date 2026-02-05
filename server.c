@@ -18,6 +18,7 @@
 #include "logger.h"
 #include "player.h"
 #include "score.h"
+#include "game.h"
 
 #define SERVER_PORT 8080
 #define MAX_CLIENTS 4
@@ -100,17 +101,70 @@ void cleanup(int sig)
 void markPlayerDisconnected(SharedGameState *gameState, int playerID)
 {
     pthread_mutex_lock(&gameState->mutex);
+    char msg[LOG_MSG_LENGTH];
 
     gameState->players[playerID].connected = false;
     gameState->players[playerID].readyToStart = false;
 
     gameState->playerCount--;
 
-    pthread_mutex_unlock(&gameState->mutex);
-    char msg[LOG_MSG_LENGTH];
     snprintf(msg, LOG_MSG_LENGTH, "Player %d disconnected\n", playerID);
-
     pushLogEvent(gameState, LOG_PLAYER, msg);
+    bool gameRunning = gameState->gameStarted;
+    if (gameRunning)
+    {
+        gameState->gameStarted = false;
+        gameState->currentTurn = -1;
+        resetGameState(gameState);
+    }
+
+    pthread_mutex_unlock(&gameState->mutex);
+
+    if (gameRunning)
+    {
+        char notify[128];
+        snprintf(notify, sizeof(notify),
+                 "GAME_STOPPED\nPlayer %d left the game.\nPlease type 1 to READY.\n<<END>>\n",
+                 playerID);
+
+        for (int i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (gameState->players[i].connected)
+            {
+                send(gameState->players[i].socket,
+                     notify,
+                     strlen(notify), 0);
+            }
+        }
+
+        printf("Game stopped. Player %d left. Waiting for players...\n", playerID);
+    }
+
+    int connectedCount = 0;
+    int readyCount = 0;
+
+    for (int i = 0; i < MAX_PLAYERS; i++)
+    {
+        if (gameState->players[i].connected)
+        {
+            connectedCount++;
+            if (gameState->players[i].readyToStart)
+            {
+                readyCount++;
+            }
+        }
+    }
+
+    /* Re-check start condition AFTER disconnect */
+    if (!gameState->gameStarted &&
+        connectedCount >= 2 &&
+        readyCount == connectedCount)
+    {
+        gameState->gameStarted = true;
+        gameState->currentTurn = 0;
+
+        pushLogEvent(gameState, LOG_PLAYER,"All remaining players ready. Game started.\n");
+    }
 }
 
 void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
@@ -119,12 +173,16 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
     buffer[strcspn(buffer, "\n")] = 0;
     pthread_mutex_unlock(&gameState->mutex);
 
+    int connectedCount = 0;
+    int readyCount = 0;
+
     if (strcmp(buffer, "1") == 0)
     {
         if (!gameState->players[playerID].readyToStart)
         {
             pthread_mutex_lock(&gameState->mutex);
             gameState->players[playerID].readyToStart = true;
+            gameState->players[playerID].waitingNotified = false;
 
             char msg[LOG_MSG_LENGTH];
             snprintf(msg, LOG_MSG_LENGTH, "Player %d is READY\n", playerID);
@@ -134,8 +192,7 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
 
         if (!gameState->gameStarted)
         {
-            int connectedCount = 0;
-            int readyCount = 0;
+
             pthread_mutex_lock(&gameState->mutex);
 
             for (int i = 0; i < MAX_PLAYERS; i++)
@@ -149,6 +206,14 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
                     }
                 }
             }
+            pthread_mutex_unlock(&gameState->mutex);
+        }
+
+        if (connectedCount >= 2 && readyCount == connectedCount)
+        {
+            pthread_mutex_lock(&gameState->mutex);
+            gameState->gameStarted = true;
+            gameState->currentTurn = 0;
             pthread_mutex_unlock(&gameState->mutex);
         }
     }
@@ -187,7 +252,6 @@ void handleTCPClient(int sock, SharedGameState *gameState, int myPlayerID)
     send(sock, "Successful connect to Server\n", 30, 0);
 
     bool sentWaiting = false;
-    bool sentGameStart = false;
 
     while (1)
     {
@@ -221,23 +285,18 @@ void handleTCPClient(int sock, SharedGameState *gameState, int myPlayerID)
         int matched = gameState->matchedPaires;
         pthread_mutex_unlock(&gameState->mutex);
 
-        if (iAmReady && !started && !sentWaiting)
+        if (iAmReady && !started && !gameState->players[myPlayerID].waitingNotified)
         {
             send(sock,
                  "Waiting for other players to connect/ready...\n",
                  49, 0);
-            sentWaiting = true;
+
+            gameState->players[myPlayerID].waitingNotified = true;
         }
 
         if (started)
         {
             sentWaiting = true;
-        }
-
-        if (started && !sentGameStart)
-        {
-            send(sock, "Game Started\n", 13, 0);
-            sentGameStart = true;
         }
     }
 
@@ -260,8 +319,8 @@ int main()
     initGameState(gameState);
     pthread_mutex_unlock(&gameState->mutex);
 
-    scores_init(gameState);
     scores_load(gameState);
+    scores_init(gameState);
 
     sem_init(&gameState->turnSemaphore, 1, 0);
     sem_init(&gameState->turnCompleteSemaphore, 1, 0);
@@ -278,6 +337,9 @@ int main()
     pthread_create(&loggerThread, NULL, loggerThreadFunc, gameState);
     sem_wait(&gameState->logReadySemaphore);
 
+    pthread_t gameThread;
+    pthread_create(&gameThread, NULL, gameLoopThread, gameState);
+
     int serverSocket = setupServerSocket();
     signal(SIGINT, cleanup);
 
@@ -291,23 +353,16 @@ int main()
         int clientSocket = accept(serverSocket,
                                   (struct sockaddr *)&clientAddr,
                                   &len);
-                                  
-        int connectedCount = 0;
-        int readyCount = 0;
-        // change to >= 3 later
-        if (connectedCount >= 2 && readyCount == connectedCount)
+
+        pthread_mutex_lock(&gameState->mutex);
+        if (gameState->gameStarted)
         {
-            pthread_mutex_lock(&gameState->mutex);
-            gameState->gameStarted = true;
-            gameState->currentTurn = 0;
             pthread_mutex_unlock(&gameState->mutex);
-
-            setupBoard(gameState, 4, 6);
-            sendBoardStateToAll(gameState);
-            printf("Connected count : %d\n", connectedCount);
-            pushLogEvent(gameState, LOG_GAME, "Game Started\n");
+            send(clientSocket, "Game already started\n", 21, 0);
+            close(clientSocket);
+            continue;
         }
-
+        pthread_mutex_unlock(&gameState->mutex);
         if (clientSocket < 0)
             continue;
 
