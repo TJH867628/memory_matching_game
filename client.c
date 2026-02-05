@@ -34,7 +34,7 @@ int main() {
     /* ===== SERVER ADDRESS ===== */
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(SERVER_PORT);
-    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    serverAddr.sin_addr.s_addr = inet_addr("172.24.170.145");
 
     /* ===== CONNECT ===== */
     if (connect(sock, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
