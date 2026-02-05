@@ -116,24 +116,27 @@ void markPlayerDisconnected(SharedGameState *gameState, int playerID)
 void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
 {
     pthread_mutex_lock(&gameState->mutex);
-
     buffer[strcspn(buffer, "\n")] = 0;
+    pthread_mutex_unlock(&gameState->mutex);
 
     if (strcmp(buffer, "1") == 0)
     {
         if (!gameState->players[playerID].readyToStart)
         {
+            pthread_mutex_lock(&gameState->mutex);
             gameState->players[playerID].readyToStart = true;
 
             char msg[LOG_MSG_LENGTH];
             snprintf(msg, LOG_MSG_LENGTH, "Player %d is READY\n", playerID);
             pushLogEvent(gameState, LOG_PLAYER, msg);
+            pthread_mutex_unlock(&gameState->mutex);
         }
 
         if (!gameState->gameStarted)
         {
             int connectedCount = 0;
             int readyCount = 0;
+            pthread_mutex_lock(&gameState->mutex);
 
             for (int i = 0; i < MAX_PLAYERS; i++)
             {
@@ -146,14 +149,19 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
                     }
                 }
             }
+            pthread_mutex_unlock(&gameState->mutex);
 
             // change to >= 3 later
             if (connectedCount >= 2 && readyCount == connectedCount)
             {
+                pthread_mutex_lock(&gameState->mutex);
                 gameState->gameStarted = true;
-                setupBoard(gameState, 4, 6);
                 gameState->currentTurn = 0;
+                pthread_mutex_unlock(&gameState->mutex);
+
+                setupBoard(gameState, 4, 6);
                 sendBoardStateToAll(gameState); 
+                printf("Connected count : %d\n", connectedCount);
                 pushLogEvent(gameState, LOG_GAME, "Game Started\n");
             }
         }
@@ -184,8 +192,6 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
             }
         }
     }
-
-    pthread_mutex_unlock(&gameState->mutex);
 }
 
 void handleTCPClient(int sock, SharedGameState *gameState, int myPlayerID)
