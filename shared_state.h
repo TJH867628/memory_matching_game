@@ -79,6 +79,7 @@ typedef struct{
     sem_t logSpacesSemaphore;//Use to signal there is space in the log 
     
     bool gameStarted;
+    bool boardNeedsBroadcast;
     int playerCount;
     int currentTurn;
     int boardRows;

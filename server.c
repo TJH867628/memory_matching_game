@@ -32,12 +32,14 @@ int childCount = 0;
 
 /* ---------------- TCP SETUP ---------------- */
 
-int setupServerSocket(){
+int setupServerSocket()
+{
     int server_fd;
     struct sockaddr_in address;
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd < 0){
+    if (server_fd < 0)
+    {
         perror("Socket failed");
         exit(1);
     }
@@ -49,12 +51,14 @@ int setupServerSocket(){
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(SERVER_PORT);
 
-    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0){
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+    {
         perror("Bind failed");
         exit(1);
     }
 
-    if (listen(server_fd, MAX_CLIENTS) < 0){
+    if (listen(server_fd, MAX_CLIENTS) < 0)
+    {
         perror("Listen failed");
         exit(1);
     }
@@ -65,12 +69,14 @@ int setupServerSocket(){
 
 /* ---------------- CLEANUP ---------------- */
 
-void cleanup(int sig){
+void cleanup(int sig)
+{
     serverRunning = 0;
     printf("\nShutting down server...\n");
 
-    for(int i = 0; i < childCount ; i++){
-        kill(childsPID[i],SIGTERM);
+    for (int i = 0; i < childCount; i++)
+    {
+        kill(childsPID[i], SIGTERM);
     }
 
     scores_save(gameState);
@@ -91,7 +97,8 @@ void cleanup(int sig){
     exit(0);
 }
 
-void markPlayerDisconnected(SharedGameState *gameState,int playerID){
+void markPlayerDisconnected(SharedGameState *gameState, int playerID)
+{
     pthread_mutex_lock(&gameState->mutex);
 
     gameState->players[playerID].connected = false;
@@ -101,10 +108,9 @@ void markPlayerDisconnected(SharedGameState *gameState,int playerID){
 
     pthread_mutex_unlock(&gameState->mutex);
     char msg[LOG_MSG_LENGTH];
-    snprintf(msg, LOG_MSG_LENGTH,"Player %d disconnected\n", playerID);
+    snprintf(msg, LOG_MSG_LENGTH, "Player %d disconnected\n", playerID);
 
     pushLogEvent(gameState, LOG_PLAYER, msg);
-
 }
 
 void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
@@ -113,8 +119,10 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
 
     buffer[strcspn(buffer, "\n")] = 0;
 
-    if (strcmp(buffer, "1") == 0) {
-        if (!gameState->players[playerID].readyToStart) {
+    if (strcmp(buffer, "1") == 0)
+    {
+        if (!gameState->players[playerID].readyToStart)
+        {
             gameState->players[playerID].readyToStart = true;
 
             char msg[LOG_MSG_LENGTH];
@@ -122,40 +130,54 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
             pushLogEvent(gameState, LOG_PLAYER, msg);
         }
 
-        if (!gameState->gameStarted) {
+        if (!gameState->gameStarted)
+        {
             int connectedCount = 0;
             int readyCount = 0;
 
-            for (int i = 0; i < MAX_PLAYERS; i++) {
-                if (gameState->players[i].connected) {
+            for (int i = 0; i < MAX_PLAYERS; i++)
+            {
+                if (gameState->players[i].connected)
+                {
                     connectedCount++;
-                    if (gameState->players[i].readyToStart) {
+                    if (gameState->players[i].readyToStart)
+                    {
                         readyCount++;
                     }
                 }
             }
-            
-            //change to >= 3 later
-            if (connectedCount >= 2 && readyCount == connectedCount) {
+
+            // change to >= 3 later
+            if (connectedCount >= 2 && readyCount == connectedCount)
+            {
                 gameState->gameStarted = true;
+                setupBoard(gameState, 4, 6);
+                gameState->currentTurn = 0;
+                sendBoardStateToAll(gameState); 
                 pushLogEvent(gameState, LOG_GAME, "Game Started\n");
             }
         }
-    }else{
+    }
+    else
+    {
         char cmd[16];
         int idx;
-        if(sscanf(buffer, "%15s %d", cmd, &idx) == 2){
-            if(strcmp(cmd, "FLIP") <= 2 && gameState->currentTurn == playerID){
+        if (sscanf(buffer, "%15s %d", cmd, &idx) == 2)
+        {
+            if (strcmp(cmd, "FLIP") <= 2 && gameState->currentTurn == playerID)
+            {
                 gameState->players[playerID].pendingAction = true;
                 gameState->players[playerID].pendingCardIndex = idx;
 
                 char msg[LOG_MSG_LENGTH];
                 snprintf(msg, LOG_MSG_LENGTH, "Player %d requests to FLIP card %d\n", playerID, idx);
                 pushLogEvent(gameState, LOG_PLAYER, msg);
-            } else{
+            }
+            else
+            {
                 gameState->players[playerID].pendingAction = false;
                 gameState->players[playerID].pendingCardIndex = -1;
-                
+
                 char msg[LOG_MSG_LENGTH];
                 snprintf(msg, LOG_MSG_LENGTH, "Player %d sent invalid command: %s\n", playerID, buffer);
                 pushLogEvent(gameState, LOG_PLAYER, msg);
@@ -175,7 +197,8 @@ void handleTCPClient(int sock, SharedGameState *gameState, int myPlayerID)
     bool sentWaiting = false;
     bool sentGameStart = false;
 
-    while (1) {
+    while (1)
+    {
         fd_set readfds;
         FD_ZERO(&readfds);
         FD_SET(sock, &readfds);
@@ -186,11 +209,13 @@ void handleTCPClient(int sock, SharedGameState *gameState, int myPlayerID)
 
         int rv = select(sock + 1, &readfds, NULL, NULL, &tv);
 
-        if (rv > 0 && FD_ISSET(sock, &readfds)) {
+        if (rv > 0 && FD_ISSET(sock, &readfds))
+        {
             memset(buffer, 0, sizeof(buffer));
             int bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
 
-            if (bytes <= 0) {
+            if (bytes <= 0)
+            {
                 markPlayerDisconnected(gameState, myPlayerID);
                 break;
             }
@@ -201,37 +226,37 @@ void handleTCPClient(int sock, SharedGameState *gameState, int myPlayerID)
         pthread_mutex_lock(&gameState->mutex);
         bool iAmReady = gameState->players[myPlayerID].readyToStart;
         bool started = gameState->gameStarted;
+        int matched = gameState->matchedPaires;
         pthread_mutex_unlock(&gameState->mutex);
 
-        if (iAmReady && !started && !sentWaiting) {
+        if (iAmReady && !started && !sentWaiting)
+        {
             send(sock,
-                "Waiting for other players to connect/ready...\n",
-                49, 0);
+                 "Waiting for other players to connect/ready...\n",
+                 49, 0);
             sentWaiting = true;
         }
 
-        if (started) {
+        if (started)
+        {
             sentWaiting = true;
         }
 
         if (started && !sentGameStart) {
-            const char *msg = "Game Started\n";
-            send(sock, msg, strlen(msg), 0);
+            send(sock, "Game Started\n", 13, 0);
             sentGameStart = true;
-            sendBoardStateToAll(gameState);
         }
     }
 
     close(sock);
 }
 
-
 /* ---------------- MAIN ---------------- */
 int main()
 {
     key_t key = ftok("server.c", 65);
     sharedMemoryID = shmget(key, sizeof(SharedGameState), 0666 | IPC_CREAT);
-    gameState = (SharedGameState*) shmat(sharedMemoryID, NULL, 0);
+    gameState = (SharedGameState *)shmat(sharedMemoryID, NULL, 0);
 
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -265,12 +290,13 @@ int main()
 
     printf("Waiting for players...\n");
 
-    while (1) {
+    while (1)
+    {
         struct sockaddr_in clientAddr;
         socklen_t len = sizeof(clientAddr);
 
         int clientSocket = accept(serverSocket,
-                                  (struct sockaddr*)&clientAddr,
+                                  (struct sockaddr *)&clientAddr,
                                   &len);
 
         if (clientSocket < 0)
@@ -280,20 +306,24 @@ int main()
         int slot = -1;
 
         pthread_mutex_lock(&gameState->mutex);
-        for (int i = 0; i < MAX_PLAYERS; i++) {
-            if (!gameState->players[i].connected) {
+        for (int i = 0; i < MAX_PLAYERS; i++)
+        {
+            if (!gameState->players[i].connected)
+            {
                 slot = i;
                 gameState->players[i].playerID = i;
                 gameState->players[i].connected = true;
                 gameState->players[i].readyToStart = false;
                 gameState->players[i].pid = -1;
+                gameState->players[i].socket = clientSocket;
                 gameState->playerCount++;
                 break;
             }
         }
         pthread_mutex_unlock(&gameState->mutex);
 
-        if (slot == -1) {
+        if (slot == -1)
+        {
             const char *msg = "Server full. Try later.\n";
             send(clientSocket, msg, strlen(msg), 0);
             close(clientSocket);
@@ -302,7 +332,8 @@ int main()
 
         pid_t pid = fork();
 
-        if (pid == 0) {
+        if (pid == 0)
+        {
             /* child section */
             close(serverSocket);
             signal(SIGINT, SIG_IGN);
@@ -310,7 +341,8 @@ int main()
             handleTCPClient(clientSocket, gameState, slot);
             exit(0);
         }
-        else if (pid > 0) {
+        else if (pid > 0)
+        {
             /* parent section */
             childsPID[childCount++] = pid;
 
@@ -324,7 +356,7 @@ int main()
 
             pthread_mutex_unlock(&gameState->mutex);
 
-            close(clientSocket);
+            // close(clientSocket);
         }
     }
 }
