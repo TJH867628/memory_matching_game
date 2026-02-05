@@ -141,6 +141,26 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
                 pushLogEvent(gameState, LOG_GAME, "Game Started\n");
             }
         }
+    }else{
+        char cmd[16];
+        int idx;
+        if(sscanf(buffer, "%15s %d", cmd, &idx) == 2){
+            if(strcmp(cmd, "FLIP") <= 2 && gameState->currentTurn == playerID){
+                gameState->players[playerID].pendingAction = true;
+                gameState->players[playerID].pendingCardIndex = idx;
+
+                char msg[LOG_MSG_LENGTH];
+                snprintf(msg, LOG_MSG_LENGTH, "Player %d requests to FLIP card %d\n", playerID, idx);
+                pushLogEvent(gameState, LOG_PLAYER, msg);
+            } else{
+                gameState->players[playerID].pendingAction = false;
+                gameState->players[playerID].pendingCardIndex = -1;
+                
+                char msg[LOG_MSG_LENGTH];
+                snprintf(msg, LOG_MSG_LENGTH, "Player %d sent invalid command: %s\n", playerID, buffer);
+                pushLogEvent(gameState, LOG_PLAYER, msg);
+            }
+        }
     }
 
     pthread_mutex_unlock(&gameState->mutex);
@@ -198,11 +218,13 @@ void handleTCPClient(int sock, SharedGameState *gameState, int myPlayerID)
             const char *msg = "Game Started\n";
             send(sock, msg, strlen(msg), 0);
             sentGameStart = true;
+            sendBoardStateToAll(gameState);
         }
     }
 
     close(sock);
 }
+
 
 /* ---------------- MAIN ---------------- */
 int main()
