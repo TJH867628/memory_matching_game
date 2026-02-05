@@ -4,14 +4,17 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/select.h>
 
 #define SERVER_PORT 8080
 #define BUFFER_SIZE 128
 
-bool checkServerConnection(int sock) {
+bool checkServerConnection(int sock)
+{
     char temp;
-    int bytes = recv(sock, &temp, 1, MSG_PEEK); 
-    if (bytes <= 0) {
+    int bytes = recv(sock, &temp, 1, MSG_PEEK);
+    if (bytes <= 0)
+    {
         printf("Server is not responding. Exiting.\n");
         close(sock);
         return false;
@@ -19,14 +22,16 @@ bool checkServerConnection(int sock) {
     return true;
 }
 
-int main() {
+int main()
+{
     int sock;
     struct sockaddr_in serverAddr;
     char buffer[BUFFER_SIZE];
 
     /* ===== CREATE SOCKET ===== */
     sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) {
+    if (sock < 0)
+    {
         perror("Socket creation failed");
         exit(1);
     }
@@ -37,7 +42,8 @@ int main() {
     serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     /* ===== CONNECT ===== */
-    if (connect(sock, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
+    if (connect(sock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
+    {
         perror("Connection failed");
         close(sock);
         exit(1);
@@ -49,12 +55,15 @@ int main() {
     printf("%s\n", buffer);
 
     /* ===== READY PHASE ===== */
-    while (1) {
+    while (1)
+    {
         printf("Please type 1 to READY: ");
         fgets(buffer, sizeof(buffer), stdin);
 
-        if (buffer[0] != '1') {
-            if (!checkServerConnection(sock)) return 0;
+        if (buffer[0] != '1')
+        {
+            if (!checkServerConnection(sock))
+                return 0;
             continue;
         }
 
@@ -64,11 +73,13 @@ int main() {
     }
 
     /* ===== WAIT FOR GAME START ===== */
-    while (1) {
+    while (1)
+    {
         memset(buffer, 0, sizeof(buffer));
         int bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
 
-        if (bytes <= 0) {
+        if (bytes <= 0)
+        {
             printf("Disconnected from server.\n");
             close(sock);
             return 0;
@@ -81,22 +92,56 @@ int main() {
             break;
     }
 
-    /* ===== GAME LOOP ===== */
-    while (1) {
-        printf("Enter move (e.g., FLIP 2): ");
-        fgets(buffer, sizeof(buffer), stdin);
+    /* ===== GAME LOOP (FIXED WITH SELECT) ===== */
+    fd_set readfds;
 
-        send(sock, buffer, strlen(buffer), 0);
+    while (1)
+    {
+        FD_ZERO(&readfds);
+        FD_SET(sock, &readfds); // server
+        FD_SET(0, &readfds);    // keyboard
 
-        memset(buffer, 0, sizeof(buffer));
-        int bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
+        int maxfd = sock > 0 ? sock : 0;
 
-        if (bytes <= 0) {
-            printf("Disconnected from server.\n");
-            break;
+        select(maxfd + 1, &readfds, NULL, NULL, NULL);
+
+        /* If server sent something */
+        if (FD_ISSET(sock, &readfds))
+        {
+            static char bigBuffer[4096];
+            static int len = 0;
+
+            int bytes = recv(sock, bigBuffer + len, sizeof(bigBuffer) - len - 1, 0);
+            if (bytes <= 0)
+            {
+                printf("\nDisconnected from server.\n");
+                break;
+            }
+
+            len += bytes;
+            bigBuffer[len] = '\0';
+
+            char *end;
+            while ((end = strstr(bigBuffer, "<<END_BOARD>>")) != NULL)
+            {
+                *end = '\0'; // terminate one full message
+
+                printf("\n%s\n", bigBuffer);
+                fflush(stdout);
+
+                // Move remaining data to front
+                len -= (end - bigBuffer) + strlen("<<END_BOARD>>");
+                memmove(bigBuffer, end + strlen("<<END_BOARD>>"), len);
+                bigBuffer[len] = '\0';
+            }
         }
 
-        printf("%s", buffer);
+        /* If user typed something */
+        if (FD_ISSET(0, &readfds))
+        {
+            fgets(buffer, sizeof(buffer), stdin);
+            send(sock, buffer, strlen(buffer), 0);
+        }
     }
 
     close(sock);

@@ -367,3 +367,108 @@
 [Fri Feb  6 02:31:58 2026][GAME] Game Started
 [Fri Feb  6 02:32:07 2026][PLAYER] Player 0 requests to FLIP card 2
 [Fri Feb  6 02:32:09 2026][PLAYER] Player 0 disconnected
+[Fri Feb  6 02:52:24 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 02:52:26 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 02:52:31 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 02:52:33 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 02:52:33 2026][GAME] Game Started
+[Fri Feb  6 02:52:46 2026][PLAYER] Player 1 sent invalid command: FLIP 2
+[Fri Feb  6 03:02:52 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:02:54 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:02:57 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:03:00 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:03:00 2026][GAME] Game Started
+[Fri Feb  6 03:05:04 2026][PLAYER] Player 1 disconnected
+[Fri Feb  6 03:05:06 2026][PLAYER] Player 0 disconnected
+[Fri Feb  6 03:05:16 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:05:17 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:05:22 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:05:23 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:05:23 2026][GAME] Game Started
+[Fri Feb  6 03:06:32 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:06:33 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:06:36 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:06:37 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:06:37 2026][GAME] Game Started
+[Fri Feb  6 03:08:59 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:08:59 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:09:03 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:09:03 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:09:03 2026][GAME] Game Started
+[Fri Feb  6 03:14:08 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:14:09 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:14:13 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:14:14 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:14:14 2026][GAME] Game Started
+[Fri Feb  6 03:15:29 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:15:31 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:15:35 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:15:35 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:15:35 2026][GAME] Game Started
+[Fri Feb  6 03:16:19 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:16:26 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:16:27 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:16:29 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:16:29 2026][GAME] Game Started
+[Fri Feb  6 03:18:08 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:18:09 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:18:13 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:18:13 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:18:13 2026][GAME] Game Started
+[Fri Feb  6 03:20:19 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:20:21 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:20:25 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:20:26 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:20:26 2026][GAME] Game Started
+[Fri Feb  6 03:23:06 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:23:07 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:23:10 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:23:11 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:23:11 2026][GAME] Game Started
+[Fri Feb  6 03:28:00 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:28:00 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:28:04 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:28:05 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:28:05 2026][GAME] Game Started
+[Fri Feb  6 03:30:51 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:30:52 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:30:56 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:30:56 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:30:56 2026][GAME] Game Started
+[Fri Feb  6 03:32:30 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:32:30 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:32:36 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:32:36 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:32:36 2026][GAME] Game Started
+[Fri Feb  6 03:38:59 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:38:59 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:39:03 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:39:03 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:39:44 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:39:44 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:39:47 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:39:48 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:39:48 2026][GAME] Game Started
+[Fri Feb  6 03:40:45 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:40:45 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:40:48 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:40:48 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:40:48 2026][GAME] Game Started
+[Fri Feb  6 03:43:24 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:43:25 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:43:29 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:43:29 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:43:29 2026][GAME] Game Started
+[Fri Feb  6 03:44:05 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:44:05 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:44:08 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:44:09 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:45:13 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:45:14 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:45:17 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:45:18 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:50:03 2026][PLAYER] New connection assigned to Player 0
+[Fri Feb  6 03:50:03 2026][PLAYER] Player 0 is READY
+[Fri Feb  6 03:50:07 2026][PLAYER] New connection assigned to Player 1
+[Fri Feb  6 03:50:08 2026][PLAYER] Player 1 is READY
+[Fri Feb  6 03:50:08 2026][GAME] Game Started
