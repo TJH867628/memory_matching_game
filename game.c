@@ -142,9 +142,20 @@ void *gameLoopThread(void *arg)
 
         if (!boardInitialized) {
             printf("Game Started!\n");
+            const char *startMsg = "\nGAME STARTED\n";
+
+            for (int i = 0; i < MAX_PLAYERS; i++) {
+                if (state->players[i].connected) {
+                    send(state->players[i].socket,
+                        startMsg,
+                        strlen(startMsg),
+                        0);
+                }
+            }
             setupBoard(state, 4, 6);
             boardInitialized = true;
             pthread_mutex_unlock(&state->mutex);
+
 
             // send AFTER unlocking
             sendBoardStateToAll(state);
