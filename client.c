@@ -39,7 +39,7 @@ int main()
     /* ===== SERVER ADDRESS ===== */
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(SERVER_PORT);
-    serverAddr.sin_addr.s_addr = inet_addr("172.24.170.145");
+    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     /* ===== CONNECT ===== */
     if (connect(sock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
@@ -61,7 +61,7 @@ int main()
         return 0;
     }
 
-    READY_PHASE:
+READY_PHASE:
     /* ===== READY PHASE ===== */
     while (1)
     {
@@ -81,7 +81,7 @@ int main()
         send(sock, buffer, strlen(buffer), 0);
         break;
     }
-        /* Send READY to server */
+    /* Send READY to server */
 
     /* ===== WAIT FOR GAME START ===== */
     while (1)
@@ -151,8 +151,6 @@ int main()
                     break;
                 }
 
-                
-
                 len -= (end - bigBuffer) + strlen("<<END>>");
                 memmove(bigBuffer, end + strlen("<<END>>"), len);
                 bigBuffer[len] = '\0';
@@ -163,7 +161,11 @@ int main()
         if (FD_ISSET(0, &readfds))
         {
             fgets(buffer, sizeof(buffer), stdin);
-            send(sock, buffer, strlen(buffer), 0);
+            // only send valid game commands
+            if (strncmp(buffer, "FLIP", 4) == 0)
+            {
+                send(sock, buffer, strlen(buffer), 0);
+            }
         }
     }
 

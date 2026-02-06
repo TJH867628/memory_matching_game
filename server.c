@@ -163,7 +163,7 @@ void markPlayerDisconnected(SharedGameState *gameState, int playerID)
         gameState->gameStarted = true;
         gameState->currentTurn = 0;
 
-        pushLogEvent(gameState, LOG_PLAYER,"All remaining players ready. Game started.\n");
+        pushLogEvent(gameState, LOG_PLAYER, "All remaining players ready. Game started.\n");
     }
 }
 
@@ -221,26 +221,39 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
     {
         char cmd[16];
         int idx;
+
         if (sscanf(buffer, "%15s %d", cmd, &idx) == 2)
         {
-            if (strcmp(cmd, "FLIP") <= 2 && gameState->currentTurn == playerID)
+            pthread_mutex_lock(&gameState->mutex);
+
+            // Not your turn
+            if (gameState->currentTurn != playerID)
+            {
+                pthread_mutex_unlock(&gameState->mutex);
+                return;
+            }
+
+            // Already waiting for game thread
+            if (gameState->players[playerID].pendingAction)
+            {
+                pthread_mutex_unlock(&gameState->mutex);
+                return;
+            }
+
+            // ✅ THIS PART WAS MISSING EFFECTIVELY
+            if (strcmp(cmd, "FLIP") == 0)
             {
                 gameState->players[playerID].pendingAction = true;
                 gameState->players[playerID].pendingCardIndex = idx;
 
                 char msg[LOG_MSG_LENGTH];
-                snprintf(msg, LOG_MSG_LENGTH, "Player %d requests to FLIP card %d\n", playerID, idx);
+                snprintf(msg, LOG_MSG_LENGTH,
+                         "Player %d requests to FLIP card %d\n",
+                         playerID, idx);
                 pushLogEvent(gameState, LOG_PLAYER, msg);
             }
-            else
-            {
-                gameState->players[playerID].pendingAction = false;
-                gameState->players[playerID].pendingCardIndex = -1;
 
-                char msg[LOG_MSG_LENGTH];
-                snprintf(msg, LOG_MSG_LENGTH, "Player %d sent invalid command: %s\n", playerID, buffer);
-                pushLogEvent(gameState, LOG_PLAYER, msg);
-            }
+            pthread_mutex_unlock(&gameState->mutex);
         }
     }
 }
@@ -419,7 +432,7 @@ int main()
             pushLogEvent(gameState, LOG_PLAYER, msg);
 
             pthread_mutex_unlock(&gameState->mutex);
-
+    
             // close(clientSocket);
         }
     }

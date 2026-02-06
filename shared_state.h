@@ -32,6 +32,7 @@ typedef struct{
     bool wantToJoin;
     bool readyToStart;
     bool pendingAction;
+    int flipsDone;
     int pendingCardIndex;
     int firstFlipIndex;
     int secondFlipIndex;

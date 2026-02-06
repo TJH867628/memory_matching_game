@@ -24,6 +24,7 @@ void initGameState(SharedGameState *state){
         state->players[i].wantToJoin = false;
         state->players[i].readyToStart = false;
         state->players[i].pendingAction = false;
+        state->players[i].flipsDone = 0;
         state->players[i].pendingCardIndex = -1;
         state->players[i].firstFlipIndex = -1;
         state->players[i].secondFlipIndex = -1;
@@ -50,6 +51,7 @@ void resetGameState(SharedGameState *state){
             state->players[i].score = 0;
             state->players[i].readyToStart = false;
             state->players[i].pendingAction = false;
+            state->players[i].flipsDone = 0;
             state->players[i].pendingCardIndex = -1;
             state->players[i].firstFlipIndex = -1;
             state->players[i].secondFlipIndex = -1;
