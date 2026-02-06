@@ -65,13 +65,15 @@ int main()
     /* ===== READY PHASE ===== */
     while (1)
     {
-        printf("Please type 1 to READY: ");
-        fgets(buffer, sizeof(buffer), stdin);
+        printf("Please type 1 to READY:");
+        fflush(stdout);
+
+        if (!fgets(buffer, sizeof(buffer), stdin))
+            return 0;
 
         if (buffer[0] != '1')
         {
-            if (!checkServerConnection(sock))
-                return 0;
+            printf("Unexpected Input.\n\n");
             continue;
         }
 
@@ -79,6 +81,7 @@ int main()
         send(sock, buffer, strlen(buffer), 0);
         break;
     }
+        /* Send READY to server */
 
     /* ===== WAIT FOR GAME START ===== */
     while (1)
