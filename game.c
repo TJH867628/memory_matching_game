@@ -95,7 +95,7 @@ void formatOfBoard(SharedGameState *state, char *buffer, size_t bufsize)
             char cell[16];
 
             if (card->isMatched)
-                snprintf(cell, sizeof(cell), " [%02d] ",card->faceValue);
+                snprintf(cell, sizeof(cell), " [%02d] ", card->faceValue);
             else if (card->isFlipped)
                 snprintf(cell, sizeof(cell), " [%02d] ", card->faceValue);
             else
@@ -118,6 +118,7 @@ void formatOfBoard(SharedGameState *state, char *buffer, size_t bufsize)
 
         strncat(buffer, "\n", bufsize - strlen(buffer) - 1);
     }
+
 }
 
 void formatOfBoardForServer(SharedGameState *state, char *buffer, size_t bufsize)

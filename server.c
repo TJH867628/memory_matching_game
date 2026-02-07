@@ -335,12 +335,14 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
         pthread_mutex_unlock(&gameState->mutex);
         if (cardIndex < 0 || cardIndex >= maxCards)
         {
-            send(socket, "Invalid card index!\n<<END>>\n", 30, 0);
+            const char *msg = "Invalid card index!\n<<END>>\n";
+            send(socket, msg, strlen(msg), 0);
             return;
         }
         if (currentTurn != playerID)
         {
-            send(socket, "It's not your turn!\n<<END>>\n", 19, 0);
+            const char *msg = "It's not your turn!\n<<END>>\n";
+            send(socket, msg, strlen(msg), 0);
             return;
         }
         pthread_mutex_lock(&gameState->mutex);
@@ -356,7 +358,8 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
         if (cards[cardIndex].isMatched || cards[cardIndex].isFlipped)
         {
             pthread_mutex_unlock(&gameState->mutex);
-            send(socket, "Card already matched or flipped!\n<<END>>\n", 33, 0);
+            const char *msg = "Card already matched or flipped!\n<<END>>\n";
+            send(socket, msg, strlen(msg), 0);
             return;
         }
         pthread_mutex_unlock(&gameState->mutex);
@@ -373,14 +376,14 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
             if (gameState->players[playerID].flipsDone == 0)
             {
                 gameState->players[playerID].firstFlipIndex = cardIndex;
-                gameState->players[playerID].flipsDone = 1; // Direct update
+                gameState->players[playerID].flipsDone = 1;
                 printf("Player %d flipped first card. Internal count: %d\n",
                        playerID, gameState->players[playerID].flipsDone);
             }
             else if (gameState->players[playerID].flipsDone == 1)
             {
                 gameState->players[playerID].secondFlipIndex = cardIndex;
-                gameState->players[playerID].flipsDone = 2; // Direct update
+                gameState->players[playerID].flipsDone = 2;
             }
             pthread_mutex_unlock(&gameState->mutex);
             sem_post(&gameState->flipDoneSemaphore);

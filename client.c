@@ -14,29 +14,8 @@
 
 static void updateMatchedFromBoard(const char *msg, bool matched[])
 {
-    for (int i = 0; i < TOTAL_CARDS; i++)
-        matched[i] = false;
-
-    const char *p = msg;
-    int idx = 0;
-    while (idx < TOTAL_CARDS)
-    {
-        p = strstr(p, "Values:");
-        if (!p)
-            break;
-        p += strlen("Values:");
-
-        for (int c = 0; c < BOARD_COLS && idx < TOTAL_CARDS; c++)
-        {
-            p = strchr(p, '[');
-            if (!p)
-                return;
-            if (p[1] == 'X' && p[2] == 'X')
-                matched[idx] = true;
-            idx++;
-            p++;
-        }
-    }
+    (void)msg;
+    (void)matched;
 }
 
 static void printPickPrompt(int pickCardCount)
@@ -65,7 +44,7 @@ int main()
     int sock;
     struct sockaddr_in serverAddr;
     char buffer[BUFFER_SIZE];
-    static char bigBuffer[10000]; // for the board
+    static char bigBuffer[10000];
     static int len = 0;
     int playerTurn = -1;
     bool myTurn = false;
@@ -76,6 +55,8 @@ int main()
     int lastAnnouncedTurn = -1;
     bool lastAnnouncedMyTurn = false;
     bool matchedCards[TOTAL_CARDS] = {false};
+    int lastSentIndex = -1;
+    int lastSentPick = 0;
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0)
@@ -378,7 +359,6 @@ READY_PHASE:
     {
         char *msgPtr;
         int dLen = strlen("<<END>>");
-        // 1. Setup 'select' to watch both the socket AND stdin
         fd_set readfds;
         FD_ZERO(&readfds);
         FD_SET(sock, &readfds);
@@ -386,7 +366,6 @@ READY_PHASE:
         if (watchStdin)
             FD_SET(STDIN_FILENO, &readfds);
 
-        // Wait for activity on either the socket or the keyboard
         int maxfd = sock;
         if (watchStdin && STDIN_FILENO > maxfd)
             maxfd = STDIN_FILENO;
@@ -435,6 +414,24 @@ READY_PHASE:
                         matchedCards[a] = true;
                     if (b >= 0 && b < TOTAL_CARDS)
                         matchedCards[b] = true;
+                    if (myTurn && pickCardCount > 0)
+                    {
+                        pickCardCount = 0;
+                        firstPickIndex = -1;
+                        secondPickIndex = -1;
+                        printPickPrompt(pickCardCount);
+                        fflush(stdout);
+                    }
+                }
+            }
+
+            if (strstr(currentMsg, "Cards ") != NULL && strstr(currentMsg, " not match") != NULL)
+            {
+                if (myTurn && pickCardCount > 0)
+                {
+                    pickCardCount = 0;
+                    firstPickIndex = -1;
+                    secondPickIndex = -1;
                 }
             }
 
@@ -442,11 +439,31 @@ READY_PHASE:
                 strstr(currentMsg, "already") != NULL ||
                 strstr(currentMsg, "not your turn") != NULL)
             {
-                printf("\n[SERVER ERROR]: %s\n", currentMsg);
+                bool matchedErr = strstr(currentMsg, "matched") != NULL;
+                if (matchedErr)
+                {
+                    printf("\nThat card is already matched. ");
+                    if (lastSentIndex >= 0 && lastSentIndex < TOTAL_CARDS)
+                        matchedCards[lastSentIndex] = true;
+                }
+                else
+                {
+                    printf("\n[SERVER ERROR]: %s\n", currentMsg);
+                }
                 handled = true;
-                // Decrease pickCardCount because the server rejected the last pick
-                if (pickCardCount > 0)
-                    pickCardCount--;
+                if (lastSentPick == 2)
+                {
+                    pickCardCount = 1;
+                    secondPickIndex = -1;
+                }
+                else
+                {
+                    pickCardCount = 0;
+                    firstPickIndex = -1;
+                    secondPickIndex = -1;
+                }
+                lastSentPick = 0;
+                lastSentIndex = -1;
                 if (myTurn)
                 {
                     printPickPrompt(pickCardCount);
@@ -458,6 +475,8 @@ READY_PHASE:
             {
                 myTurn = false;
                 pickCardCount = 0;
+                for (int i = 0; i < TOTAL_CARDS; i++)
+                    matchedCards[i] = false;
                 readyMode = true;
                 playerTurn = -1;
                 ignoreWaiting = true;
@@ -475,10 +494,12 @@ READY_PHASE:
                 readyMode = false;
                 ignoreWaiting = false;
                 pickCardCount = 0;
+                for (int i = 0; i < TOTAL_CARDS; i++)
+                    matchedCards[i] = false;
                 handled = true;
             }
 
-            // Use strstr to find "PLAYER TURN" anywhere in the current segment
+            //Use strstr to find PLAYER TURN if in the current segment
             char *turnIndicator = strstr(currentMsg, "PLAYER TURN");
             if (turnIndicator)
             {
@@ -514,7 +535,7 @@ READY_PHASE:
                 {
                     if (ignoreWaiting && strstr(currentMsg, "Waiting for Player") != NULL)
                     {
-                        // Ignore stale waiting messages after GAME_STOPPED
+                        //Ignore stale waiting messages after GAME_STOPPED
                     }
                     else
                     {
@@ -523,7 +544,7 @@ READY_PHASE:
                 }
             }
 
-            // Shift buffer
+            //Shift buffer
             int dLen = 7; // strlen("<<END>>")
             int processedLen = (msgPtr + dLen) - bigBuffer;
             int remaining = len - processedLen;
@@ -533,11 +554,19 @@ READY_PHASE:
             bigBuffer[len] = '\0';
         }
 
-        /* --- CASE B: USER INPUT --- */
         if (watchStdin && FD_ISSET(STDIN_FILENO, &readfds))
         {
             if (fgets(buffer, sizeof(buffer), stdin))
             {
+                if (buffer[strspn(buffer, " \t\r\n")] == '\0')
+                {
+                    if (myTurn)
+                    {
+                        printPickPrompt(pickCardCount);
+                        fflush(stdout);
+                    }
+                    continue;
+                }
                 if (readyMode)
                 {
                     buffer[strcspn(buffer, "\r\n")] = '\0';
@@ -558,7 +587,7 @@ READY_PHASE:
 
                 if (!myTurn)
                 {
-                    // Ignore input when it's not your turn
+                    //Ignore input when it is not this players turn
                     continue;
                 }
 
@@ -569,13 +598,19 @@ READY_PHASE:
                     continue;
                 }
                 int val;
-                // Check if it's a number AND within board bounds (e.g., 0-23 for a 4x6 board)
+                //Check if it's a number and is within board bounds 0-23 for  4x6 board
                 if (sscanf(buffer, "%d", &val) == 1)
                 {
                     if (val >= 0 && val < TOTAL_CARDS)
                     {
                         if (matchedCards[val])
                         {
+                            if (pickCardCount == 1)
+                            {
+                                printf("That card is already matched. Pick another for the second card: ");
+                                fflush(stdout);
+                                continue;
+                            }
                             printf("That card is already matched. Pick another: ");
                             fflush(stdout);
                             continue;
@@ -584,8 +619,6 @@ READY_PHASE:
                         if (pickCardCount == 1)
                         {
                             firstPickIndex = val;
-                            printf("Enter second card: ");
-                            fflush(stdout);
                         }
                         else if (pickCardCount == 2)
                         {
@@ -594,16 +627,28 @@ READY_PHASE:
                         }
                         if (firstPickIndex == secondPickIndex)
                         {
-                            printf("You cannot pick the same card twice. Please pick again.\n");
+                            printf("You cannot pick the same card twice. Please pick the second card again.\n");
                             pickCardCount = 1;
-                            printf("Enter Again Second card: ");
+                            secondPickIndex = -1;
+                            printPickPrompt(pickCardCount);
                             fflush(stdout);
                             continue;
                         }
                         send(sock, buffer, strlen(buffer), 0);
+                        lastSentIndex = val;
+                        lastSentPick = pickCardCount;
                     }
                     else
                     {
+                        if (pickCardCount == 1)
+                        {
+                            printf("Error: Index %d is out of bounds (0-%d). ", val, TOTAL_CARDS - 1);
+                            printPickPrompt(pickCardCount);
+                            fflush(stdout);
+                            continue;
+                        }
+                        firstPickIndex = -1;
+                        pickCardCount = 0;
                         printf("Error: Index %d is out of bounds (0-%d). ", val, TOTAL_CARDS - 1);
                         if (myTurn)
                             printPickPrompt(pickCardCount);
@@ -614,6 +659,15 @@ READY_PHASE:
                 }
                 else
                 {
+                    if (pickCardCount == 1)
+                    {
+                        printf("Invalid input. ");
+                        printPickPrompt(pickCardCount);
+                        fflush(stdout);
+                        continue;
+                    }
+                    firstPickIndex = -1;
+                    pickCardCount = 0;
                     printf("Invalid input. ");
                     if (myTurn)
                         printPickPrompt(pickCardCount);

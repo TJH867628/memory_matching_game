@@ -6,7 +6,7 @@
 #include <semaphore.h>
 #include <sys/types.h>
 
-#define MIN_PLAYERS 3
+#define MIN_PLAYERS 2
 #define MAX_PLAYERS 4
 #define MAX_CARDS 24
 #define LOG_MSG_LENGTH 256
