@@ -2,6 +2,6 @@
 #define SCHEDULER_H
 #include <stdio.h>
 
-void* schedulerThread(void *arg);
+void* schedulerLoopThread(void *arg);
 
 #endif

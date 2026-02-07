@@ -11,106 +11,126 @@
 #define MAX_CARDS 24
 #define LOG_MSG_LENGTH 256
 #define LOG_QUEUE_SIZE 50
+#define PLAYER_NAME_LENGTH 32
 
 extern volatile bool serverRunning;
 
-//Card
-typedef struct{
+/* --- Sub-Structures --- */
+
+typedef struct {
     int cardID;
     int faceValue;
     bool isFlipped;
     bool isMatched;
-}Card;
+} Card;
 
-//Player
-typedef struct{
+typedef struct {
     int playerID;
     int socket;
     int score;
+    char name[PLAYER_NAME_LENGTH];
     pid_t pid;
     bool connected;
     bool wantToJoin;
     bool readyToStart;
     bool pendingAction;
     int flipsDone;
-    int pendingCardIndex;
     int firstFlipIndex;
     int secondFlipIndex;
     bool waitingNotified;
-}Player;
+} Player;
 
-// Persistent Score Entry
 typedef struct {
-    int playerID;
+    char name[PLAYER_NAME_LENGTH];
     int wins;
 } ScoreEntry;
 
-// Score Table
 typedef struct {
     ScoreEntry entries[MAX_PLAYERS];
     int count;
     pthread_mutex_t scoreMutex;
 } scoreBoard;
 
-//Log Event Type
-typedef enum{
-    LOG_NONE,
-    LOG_SERVER,//Server Start/Stop
-    LOG_PLAYER,//Player Join/Leave
-    LOG_GAME,//Game Start/Reset/End Card Flip/Match/Mismatch
-    LOG_TURN,//Scheduler Turn Change
-}LogType;
+/* --- Logging Types --- */
 
-typedef struct{
+typedef enum {
+    LOG_NONE,
+    LOG_SERVER,
+    LOG_PLAYER,
+    LOG_GAME,
+    LOG_TURN
+} LogType;
+
+typedef struct {
     LogType type;
     char message[LOG_MSG_LENGTH];
-}LogEvent;
+} LogEvent;
 
-//Shared Game State
-typedef struct{
+/* --- Main Shared Game State --- */
+
+typedef struct {
+    /* GROUP 1: 8-BYTE ALIGNMENT 
+       Mutexes and Semaphores are typically 32-40 bytes and require 
+       8-byte alignment. Putting them at offset 0 anchors the struct.
+    */
     pthread_mutex_t mutex;
+    pthread_mutex_t logQueueMutex;
     sem_t turnSemaphore;
     sem_t turnCompleteSemaphore;
+    sem_t flipDoneSemaphore;
     sem_t logReadySemaphore;
+    sem_t logItemsSemaphore;
+    sem_t logSpacesSemaphore;
 
-    LogEvent logQueue[LOG_QUEUE_SIZE];
-    int logQueueHead;
-    int logQueueTail;
-    pthread_mutex_t logQueueMutex;
-    sem_t logItemsSemaphore;//Use to signal there is items in the log queue
-    sem_t logSpacesSemaphore;//Use to signal there is space in the log 
-    
-    bool gameStarted;
-    bool boardNeedsBroadcast;
-    int playerCount;
-    int currentTurn;
-    int boardRows;
-    int boardCols;
+    /* GROUP 2: 4-BYTE ALIGNMENT 
+       Grouping all integers together prevents "padding drift" 
+       between the parent process and forked children.
+    */
+    int playerCount;         
+    int currentTurn;         
+    int boardRows;           
+    int boardCols;           
     int totalPairs;
     int matchedPaires;
+    int logQueueHead;
+    int logQueueTail;
+
+    /* GROUP 3: 1-BYTE ALIGNMENT */
+    bool gameStarted;
+    bool boardNeedsBroadcast;
+
+    /* GROUP 4: COMPLEX TYPES & ARRAYS
+       Large memory blocks are placed at the end.
+    */
     Player players[MAX_PLAYERS];
     Card cards[MAX_CARDS];
+    LogEvent logQueue[LOG_QUEUE_SIZE];
     scoreBoard scoreBoard;
-}SharedGameState;
 
-typedef enum{
+} SharedGameState;
+
+/* --- Helper Enums & Structures --- */
+
+typedef enum {
     ACTION_FLIP,
     ACTION_JOIN,
     ACTION_READY,
     ACTION_QUIT
-}PlayerActionType;
+} PlayerActionType;
 
-typedef struct{
+typedef struct {
     PlayerActionType type;
     int cardIndex;
     int playerID;
-}PlayerAction;
+} PlayerAction;
 
-typedef struct{
+typedef struct {
     int currentPlayerID;
     int cardIndex;
     int totalPlayers;
-}PlayerTurn;
+} PlayerTurn;
+
+/* --- Function Prototypes --- */
 
 void initGameState(SharedGameState *state);
 void resetGameState(SharedGameState *state);

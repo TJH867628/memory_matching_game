@@ -5,11 +5,12 @@
 #include <pthread.h>
 #include <string.h>
 #include <time.h>
+#include <sys/socket.h>
 
-void* loggerThreadFunc(void *arg){
+void* loggerLoopThread(void *arg){
     SharedGameState *gameState = (SharedGameState*) arg;
     
-    //open game.log fileS *gamegameState = 
+    //open game.log file *gamegameState = 
     FILE *logFile = fopen("game.log", "a");
     if(logFile == NULL){
         perror("Failed to open log file");
@@ -22,6 +23,8 @@ void* loggerThreadFunc(void *arg){
 
     while(serverRunning){
         sem_wait(&gameState->logItemsSemaphore);//Wait for a log event in the log queue
+        if(!serverRunning)
+            break;
         int logQueueLength =
             (gameState->logQueueTail - gameState->logQueueHead + LOG_QUEUE_SIZE)
             % LOG_QUEUE_SIZE;
