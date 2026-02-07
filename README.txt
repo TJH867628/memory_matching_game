@@ -1,14 +1,14 @@
-========================================
-Memory Matching Multiplayer Game (C)
-========================================
+--------------------------------------------------
+Memory Matching Multiplayer Game
+--------------------------------------------------
 
 This project is a multiplayer Memory Matching Card Game developed in C using:
 
-• TCP Socket Programming
-• POSIX Threads
-• System V Shared Memory
-• Mutexes and Semaphores for synchronization
-• ZeroTier Virtual Network for remote multiplayer connection
+-TCP Socket Programming
+-POSIX Threads
+-System V Shared Memory
+-Mutexes and Semaphores for synchronization
+ZeroTier Virtual Network for remote multiplayer connection
 
 Players connect to the server over a ZeroTier virtual LAN and play the game turn-by-turn.
 
@@ -130,7 +130,3 @@ Example:
 • All players must be in the same ZeroTier network.
 • Maximum supported players: 4
 • If a player disconnects, the game stops and waits for remaining players to READY again.
-
---------------------------------------------------
-END OF README
---------------------------------------------------
