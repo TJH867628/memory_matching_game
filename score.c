@@ -22,7 +22,6 @@ void scores_load(SharedGameState *state) {
     pthread_mutex_lock(&state->scoreBoard.scoreMutex);
 
     if (!fp) {
-        // File doesn't exist yet
         state->scoreBoard.count = 0;
         char cwd[512];
         if (getcwd(cwd, sizeof(cwd)))
@@ -55,9 +54,7 @@ void scores_print(SharedGameState *state) {
     pthread_mutex_lock(&state->scoreBoard.scoreMutex);
     printf("\n=== SAVED SCORES ===\n");
     for (int i = 0; i < state->scoreBoard.count; i++) {
-        printf("%s: %d\n",
-               state->scoreBoard.entries[i].name,
-               state->scoreBoard.entries[i].wins);
+        printf("%s: %d\n",state->scoreBoard.entries[i].name,state->scoreBoard.entries[i].wins);
     }
     printf("====================\n\n");
     pthread_mutex_unlock(&state->scoreBoard.scoreMutex);
@@ -110,9 +107,7 @@ void scores_save(SharedGameState *state) {
 
     for (int i = 0; i < entryCount; i++)
     {
-        fprintf(fp, "%s %d\n",
-                entries[i].name,
-                entries[i].wins);
+        fprintf(fp, "%s %d\n",entries[i].name,entries[i].wins);
     }
 
     fclose(fp);
@@ -129,7 +124,6 @@ void scores_add_win(SharedGameState *state, const char *name) {
         }
     }
 
-    // New player
     if (state->scoreBoard.count < MAX_PLAYERS)
     {
         strncpy(state->scoreBoard.entries[state->scoreBoard.count].name, name, PLAYER_NAME_LENGTH - 1);

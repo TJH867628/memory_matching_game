@@ -17,8 +17,6 @@ void* loggerLoopThread(void *arg){
         return NULL;
     }
     
-    printf("Logger thread started: TID=%lu\n", pthread_self());
-
     sem_post(&gameState->logReadySemaphore);//Signal that logger is ready
 
     while(serverRunning){

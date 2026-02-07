@@ -6,7 +6,7 @@
 #include <semaphore.h>
 #include <sys/types.h>
 
-#define MIN_PLAYERS 2
+#define MIN_PLAYERS 3
 #define MAX_PLAYERS 4
 #define MAX_CARDS 24
 #define LOG_MSG_LENGTH 256
@@ -14,8 +14,6 @@
 #define PLAYER_NAME_LENGTH 32
 
 extern volatile bool serverRunning;
-
-/* --- Sub-Structures --- */
 
 typedef struct {
     int cardID;
@@ -28,6 +26,7 @@ typedef struct {
     int playerID;
     int socket;
     int score;
+    int roundScore;
     char name[PLAYER_NAME_LENGTH];
     pid_t pid;
     bool connected;
@@ -51,8 +50,6 @@ typedef struct {
     pthread_mutex_t scoreMutex;
 } scoreBoard;
 
-/* --- Logging Types --- */
-
 typedef enum {
     LOG_NONE,
     LOG_SERVER,
@@ -66,13 +63,7 @@ typedef struct {
     char message[LOG_MSG_LENGTH];
 } LogEvent;
 
-/* --- Main Shared Game State --- */
-
 typedef struct {
-    /* GROUP 1: 8-BYTE ALIGNMENT 
-       Mutexes and Semaphores are typically 32-40 bytes and require 
-       8-byte alignment. Putting them at offset 0 anchors the struct.
-    */
     pthread_mutex_t mutex;
     pthread_mutex_t logQueueMutex;
     sem_t turnSemaphore;
@@ -82,10 +73,6 @@ typedef struct {
     sem_t logItemsSemaphore;
     sem_t logSpacesSemaphore;
 
-    /* GROUP 2: 4-BYTE ALIGNMENT 
-       Grouping all integers together prevents "padding drift" 
-       between the parent process and forked children.
-    */
     int playerCount;         
     int currentTurn;         
     int boardRows;           
@@ -95,21 +82,15 @@ typedef struct {
     int logQueueHead;
     int logQueueTail;
 
-    /* GROUP 3: 1-BYTE ALIGNMENT */
     bool gameStarted;
     bool boardNeedsBroadcast;
 
-    /* GROUP 4: COMPLEX TYPES & ARRAYS
-       Large memory blocks are placed at the end.
-    */
     Player players[MAX_PLAYERS];
     Card cards[MAX_CARDS];
     LogEvent logQueue[LOG_QUEUE_SIZE];
     scoreBoard scoreBoard;
 
-} SharedGameState;
-
-/* --- Helper Enums & Structures --- */
+}SharedGameState;
 
 typedef enum {
     ACTION_FLIP,
@@ -129,8 +110,6 @@ typedef struct {
     int cardIndex;
     int totalPlayers;
 } PlayerTurn;
-
-/* --- Function Prototypes --- */
 
 void initGameState(SharedGameState *state);
 void resetGameState(SharedGameState *state);

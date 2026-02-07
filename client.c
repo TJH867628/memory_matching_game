@@ -77,7 +77,6 @@ int main()
     bool lastAnnouncedMyTurn = false;
     bool matchedCards[TOTAL_CARDS] = {false};
 
-    /* ===== CREATE SOCKET ===== */
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0)
     {
@@ -85,12 +84,10 @@ int main()
         exit(1);
     }
 
-    /* ===== SERVER ADDRESS ===== */
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(SERVER_PORT);
     serverAddr.sin_addr.s_addr = inet_addr("172.24.170.145");
 
-    /* ===== CONNECT ===== */
     if (connect(sock, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
     {
         perror("Connection failed");
@@ -98,7 +95,6 @@ int main()
         exit(1);
     }
 
-    /* ===== RECEIVE WELCOME MESSAGE (FRAMED BY <<END>>) ===== */
     bool gotPlayerID = false;
     bigBuffer[0] = '\0';
     len = 0;
@@ -107,7 +103,7 @@ int main()
         int bytes = recv(sock, bigBuffer + len, sizeof(bigBuffer) - len - 1, 0);
         if (bytes <= 0)
         {
-            printf("Disconnected from server.\n");
+            printf("\nDisconnected from server.\n");
             close(sock);
             return 0;
         }
@@ -174,7 +170,7 @@ int main()
             int bytes = recv(sock, bigBuffer + len, sizeof(bigBuffer) - len - 1, 0);
             if (bytes <= 0)
             {
-                printf("Disconnected from server.\n");
+                printf("\nDisconnected from server.\n");
                 close(sock);
                 return 0;
             }
@@ -224,7 +220,6 @@ NAME_ACCEPTED:
     }
 
 READY_PHASE:
-    /* ===== READY PHASE ===== */
     while (1)
     {
         printf("Please type 1 to READY:");
@@ -247,20 +242,18 @@ READY_PHASE:
         send(sock, buffer, strlen(buffer), 0);
         break;
     }
-    /* Send READY to server */
     bool gameStarted = false;
     bool pendingBoardMsg = false;
     char pendingBoard[4096];
     pendingBoard[0] = '\0';
 
-    /* ===== WAIT FOR GAME START ===== */
     while (1)
     {
         int bytes = recv(sock, bigBuffer + len, sizeof(bigBuffer) - len - 1, 0);
 
         if (bytes <= 0)
         {
-            printf("Disconnected from server.\n");
+            printf("\nDisconnected from server.\n");
             close(sock);
             return 0;
         }
@@ -377,8 +370,7 @@ READY_PHASE:
     }
     len = 0;
     bigBuffer[0] = '\0';
-    /* ===== GAME LOOP ===== */
-
+    
     int pickCardCount = 0;
     int firstPickIndex = -1;
     int secondPickIndex = -1;
@@ -390,10 +382,15 @@ READY_PHASE:
         fd_set readfds;
         FD_ZERO(&readfds);
         FD_SET(sock, &readfds);
-        FD_SET(STDIN_FILENO, &readfds);
+        bool watchStdin = readyMode || myTurn;
+        if (watchStdin)
+            FD_SET(STDIN_FILENO, &readfds);
 
         // Wait for activity on either the socket or the keyboard
-        if (select(sock + 1, &readfds, NULL, NULL, NULL) < 0)
+        int maxfd = sock;
+        if (watchStdin && STDIN_FILENO > maxfd)
+            maxfd = STDIN_FILENO;
+        if (select(maxfd + 1, &readfds, NULL, NULL, NULL) < 0)
             break;
 
         if (FD_ISSET(sock, &readfds))
@@ -402,7 +399,7 @@ READY_PHASE:
 
             if (bytes <= 0)
             {
-                printf("Disconnected from server.\n");
+                printf("\nDisconnected from server.\n");
                 break;
             }
 
@@ -441,7 +438,6 @@ READY_PHASE:
                 }
             }
 
-            // NEW: Handle Error Messages from server
             if (strstr(currentMsg, "Invalid") != NULL ||
                 strstr(currentMsg, "already") != NULL ||
                 strstr(currentMsg, "not your turn") != NULL)
@@ -472,6 +468,14 @@ READY_PHASE:
                 len = 0;
                 bigBuffer[0] = '\0';
                 break;
+            }
+
+            if (strstr(currentMsg, "GAME STARTED") != NULL)
+            {
+                readyMode = false;
+                ignoreWaiting = false;
+                pickCardCount = 0;
+                handled = true;
             }
 
             // Use strstr to find "PLAYER TURN" anywhere in the current segment
@@ -530,7 +534,7 @@ READY_PHASE:
         }
 
         /* --- CASE B: USER INPUT --- */
-        if (FD_ISSET(STDIN_FILENO, &readfds))
+        if (watchStdin && FD_ISSET(STDIN_FILENO, &readfds))
         {
             if (fgets(buffer, sizeof(buffer), stdin))
             {
@@ -543,13 +547,18 @@ READY_PHASE:
                     if (p[0] == '1' && p[1] == '\0')
                     {
                         send(sock, buffer, strlen(buffer), 0);
-                        readyMode = false;
                     }
                     else
                     {
                         printf("Please type exactly 1 to READY: ");
                         fflush(stdout);
                     }
+                    continue;
+                }
+
+                if (!myTurn)
+                {
+                    // Ignore input when it's not your turn
                     continue;
                 }
 

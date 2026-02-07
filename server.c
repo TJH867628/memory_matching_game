@@ -33,8 +33,6 @@ pthread_t loggerThread;
 pthread_t gameThread;
 pthread_t schedulerThread;
 
-/* ---------------- TCP SETUP ---------------- */
-
 int setupServerSocket()
 {
     int server_fd;
@@ -72,10 +70,23 @@ int setupServerSocket()
 
 void cleanup(int sig)
 {
+    if (shuttingDown)
+        return;
+    shuttingDown = 1;
     serverRunning = false;
+
+    if (!gameState)
+    {
+        printf("\nShutting down server...\n");
+        fflush(stdout);
+        exit(0);
+    }
+
+    pushLogEvent(gameState, LOG_SERVER, "Server shutting down.\n");
 
     sem_post(&gameState->turnCompleteSemaphore);
     sem_post(&gameState->turnSemaphore);
+    sem_post(&gameState->flipDoneSemaphore);
     sem_post(&gameState->logReadySemaphore);
     sem_post(&gameState->logItemsSemaphore);
     sem_post(&gameState->logSpacesSemaphore);
@@ -101,7 +112,8 @@ void cleanup(int sig)
     pthread_mutex_destroy(&gameState->logQueueMutex);
 
     shmdt(gameState);
-    shmctl(sharedMemoryID, IPC_RMID, NULL);
+    if (sharedMemoryID > 0)
+        shmctl(sharedMemoryID, IPC_RMID, NULL);
 
     printf("Server shutdown complete.\n");
     exit(0);
@@ -114,6 +126,7 @@ void markPlayerDisconnected(SharedGameState *gameState, int playerID)
 
     gameState->players[playerID].connected = false;
     gameState->players[playerID].readyToStart = false;
+    gameState->players[playerID].name[0] = '\0';
 
     gameState->playerCount--;
 
@@ -126,6 +139,7 @@ void markPlayerDisconnected(SharedGameState *gameState, int playerID)
         gameState->currentTurn = -1;
         resetGameState(gameState);
     }
+    gameState->boardNeedsBroadcast = true;
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
         if (gameState->players[i].connected)
@@ -167,9 +181,7 @@ void markPlayerDisconnected(SharedGameState *gameState, int playerID)
     }
     pthread_mutex_unlock(&gameState->mutex);
 
-    snprintf(notify, sizeof(notify),
-             "GAME_STOPPED\nPlayer %d left the game.\n%s\n%sPlease type 1 to READY.\n<<END>>\n",
-             playerID, list, scoreMsg);
+    snprintf(notify, sizeof(notify),"GAME_STOPPED\nPlayer %d left the game.\n%s\n%sPlease type 1 to READY.\n<<END>>\n",playerID,list,scoreMsg);
 
     for (int i = 0; i < MAX_PLAYERS; i++)
     {
@@ -201,7 +213,7 @@ void markPlayerDisconnected(SharedGameState *gameState, int playerID)
         }
     }
 
-    if (!gameState->gameStarted && connectedCount >= 2 && readyCount == connectedCount)
+    if (!gameState->gameStarted && connectedCount >= MIN_PLAYERS && readyCount == connectedCount)
     {
         gameState->gameStarted = true;
 
@@ -229,7 +241,7 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
             pthread_mutex_unlock(&gameState->mutex);
 
             char msg[LOG_MSG_LENGTH];
-            snprintf(msg, LOG_MSG_LENGTH, "Player %d is READY\n", playerID);
+            snprintf(msg, LOG_MSG_LENGTH,"Player %d is READY\n",playerID);
             pushLogEvent(gameState, LOG_PLAYER, msg);
         }
 
@@ -252,7 +264,7 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
             pthread_mutex_unlock(&gameState->mutex);
         }
 
-        if (connectedCount >= 2 && readyCount == connectedCount)
+        if (connectedCount >= MIN_PLAYERS && readyCount == connectedCount)
         {
             pthread_mutex_lock(&gameState->mutex);
             gameState->gameStarted = true;
@@ -281,6 +293,9 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
 
             if (nameTaken)
             {
+                char logMsg[LOG_MSG_LENGTH];
+                snprintf(logMsg, LOG_MSG_LENGTH,"Player %d tried duplicate name: %s\n",playerID,name);
+                pushLogEvent(gameState, LOG_PLAYER, logMsg);
                 const char *errMsg = "NAME_TAKEN\n<<END>>\n";
                 send(gameState->players[playerID].socket, errMsg, strlen(errMsg), 0);
                 return;
@@ -294,10 +309,15 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
             int savedScore = scores_get_wins(gameState, name);
             pthread_mutex_lock(&gameState->mutex);
             gameState->players[playerID].score = savedScore;
+            gameState->players[playerID].roundScore = 0;
             pthread_mutex_unlock(&gameState->mutex);
             char msg[128];
             snprintf(msg, sizeof(msg), "WELCOME %s (Saved Score: %d)\n<<END>>\n", name, savedScore);
             send(gameState->players[playerID].socket, msg, strlen(msg), 0);
+
+            char logMsg[LOG_MSG_LENGTH];
+            snprintf(logMsg, LOG_MSG_LENGTH,"Player %d registered name: %s (Score %d)\n",playerID,name,savedScore);
+            pushLogEvent(gameState, LOG_PLAYER, logMsg);
         }
         return;
     }
@@ -348,7 +368,6 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
         char msg[LOG_MSG_LENGTH];
         if (gameStarted)
         {
-            // Inside pushClientCommand
             pthread_mutex_lock(&gameState->mutex);
 
             if (gameState->players[playerID].flipsDone == 0)
@@ -369,7 +388,7 @@ void pushClientCommand(SharedGameState *gameState, int playerID, char *buffer)
 
         printf("Player flipped done: %d\n", gameState->players[playerID].flipsDone);
 
-        snprintf(msg, LOG_MSG_LENGTH, "Player %d flipped card %d\n", playerID, cardIndex);
+        snprintf(msg, LOG_MSG_LENGTH,"Player %d flipped card %d\n",playerID,cardIndex);
 
         pushLogEvent(gameState, LOG_PLAYER, msg);
     }
@@ -412,7 +431,7 @@ void handleTCPClient(int sock, SharedGameState *gameState, int myPlayerID)
             char *line = strtok_r(buffer, "\n", &saveptr);
             while (line)
             {
-                // Trim possible \r
+                //Remove /r
                 line[strcspn(line, "\r")] = 0;
                 if (line[0] != '\0')
                 {
@@ -440,15 +459,13 @@ void handleTCPClient(int sock, SharedGameState *gameState, int myPlayerID)
                 if (gameState->players[i].connected)
                 {
                     const char *name = gameState->players[i].name[0] ? gameState->players[i].name : "Unknown";
-                    char line[64];
-                    snprintf(line, sizeof(line), "%s (ID %d): Score %d\n", name, i, gameState->players[i].score);
+                    char line[128];
+                    snprintf(line, sizeof(line), "%s (ID %d): Total Score %d | Score This Round %d\n",name,i,gameState->players[i].score,gameState->players[i].roundScore);
                     strncat(scoreMsg, line, sizeof(scoreMsg) - strlen(scoreMsg) - 1);
                 }
             }
             pthread_mutex_unlock(&gameState->mutex);
-            snprintf(waitMsg, sizeof(waitMsg),
-                     "Waiting for other players to connect/ready...\n%s<<END>>\n",
-                     scoreMsg);
+            snprintf(waitMsg, sizeof(waitMsg),"Waiting for other players to connect/ready...\n%s<<END>>\n",scoreMsg);
             send(sock, waitMsg, strlen(waitMsg), 0);
             gameState->players[myPlayerID].waitingNotified = true;
         }
@@ -466,18 +483,21 @@ int main()
 {
     key_t key = ftok("server.c", 65);
     int existingID = shmget(key, 0, 0666);
+    //Remove existing shared memory if have
     if (existingID != -1)
     {
         shmctl(existingID, IPC_RMID, NULL);
     }
 
     sharedMemoryID = shmget(key, sizeof(SharedGameState), 0666 | IPC_CREAT | IPC_EXCL);
+    //Check if shmget failed
     if (sharedMemoryID == -1)
     {
         perror("shmget failed");
         exit(1);
     }
 
+    //Attach shared memory
     gameState = (SharedGameState *)shmat(sharedMemoryID, NULL, 0);
     if (gameState == (void *)-1)
     {
@@ -500,6 +520,7 @@ int main()
     scores_load(gameState);
     scores_print(gameState);
 
+
     sem_init(&gameState->turnSemaphore, 1, 0);
     sem_init(&gameState->turnCompleteSemaphore, 1, 0);
     sem_init(&gameState->logReadySemaphore, 1, 0);
@@ -514,6 +535,7 @@ int main()
 
     pthread_create(&loggerThread, NULL, loggerLoopThread, gameState);
     sem_wait(&gameState->logReadySemaphore);
+    pushLogEvent(gameState, LOG_SERVER, "Server started.\n");   
 
     pthread_create(&gameThread, NULL, gameLoopThread, gameState);
     pthread_create(&schedulerThread, NULL, schedulerLoopThread, gameState);
@@ -592,8 +614,7 @@ int main()
             gameState->players[slot].pid = pid;
 
             char msg[LOG_MSG_LENGTH];
-            snprintf(msg, LOG_MSG_LENGTH,
-                     "New connection assigned to Player %d\n", slot);
+            snprintf(msg, LOG_MSG_LENGTH,"New connection assigned to Player %d\n",slot);
             pushLogEvent(gameState, LOG_PLAYER, msg);
 
             pthread_mutex_unlock(&gameState->mutex);

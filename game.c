@@ -88,7 +88,6 @@ void formatOfBoard(SharedGameState *state, char *buffer, size_t bufsize)
     for (int r = 0; r < rows; r++)
     {
         strncat(buffer, "Values: ", bufsize - strlen(buffer) - 1);
-        /* ===== CARD ROW ===== */
         for (int c = 0; c < cols; c++)
         {
             int idx = r * cols + c;
@@ -96,7 +95,7 @@ void formatOfBoard(SharedGameState *state, char *buffer, size_t bufsize)
             char cell[16];
 
             if (card->isMatched)
-                snprintf(cell, sizeof(cell), " [XX] ");
+                snprintf(cell, sizeof(cell), " [%02d] ",card->faceValue);
             else if (card->isFlipped)
                 snprintf(cell, sizeof(cell), " [%02d] ", card->faceValue);
             else
@@ -108,7 +107,6 @@ void formatOfBoard(SharedGameState *state, char *buffer, size_t bufsize)
         strncat(buffer, "\n", bufsize - strlen(buffer) - 1);
 
         strncat(buffer, "IDs:    ", bufsize - strlen(buffer) - 1);
-        /* ===== CARD ID ROW (BELOW) ===== */
         for (int c = 0; c < cols; c++)
         {
             int idx = r * cols + c;
@@ -138,7 +136,6 @@ void formatOfBoardForServer(SharedGameState *state, char *buffer, size_t bufsize
     for (int r = 0; r < rows; r++)
     {
         strncat(buffer, "Values: ", bufsize - strlen(buffer) - 1);
-        /* ===== CARD ROW ===== */
         for (int c = 0; c < cols; c++)
         {
             int idx = r * cols + c;
@@ -158,7 +155,6 @@ void formatOfBoardForServer(SharedGameState *state, char *buffer, size_t bufsize
         strncat(buffer, "\n", bufsize - strlen(buffer) - 1);
 
         strncat(buffer, "IDs:    ", bufsize - strlen(buffer) - 1);
-        /* ===== CARD ID ROW (BELOW) ===== */
         for (int c = 0; c < cols; c++)
         {
             int idx = r * cols + c;
@@ -198,10 +194,10 @@ void sendBoardStateToAll(SharedGameState *state)
     {
         if (state->players[i].connected)
         {
-            char line[64];
+            char line[128];
             const char *name = state->players[i].name[0] ? state->players[i].name : "Unknown";
-            snprintf(line, sizeof(line), "%s (ID %d): Score %d\n",
-                     name, i, state->players[i].score);
+            snprintf(line, sizeof(line), "%s (ID %d): Total Score %d | Score This Round %d\n",
+                     name, i, state->players[i].score, state->players[i].roundScore);
             strncat(scoreMsg, line, sizeof(scoreMsg) - strlen(scoreMsg) - 1);
         }
     }
@@ -248,10 +244,10 @@ static void sendBoardStateToAllWithMessage(SharedGameState *state, const char *m
     {
         if (state->players[i].connected)
         {
-            char line[64];
+            char line[128];
             const char *name = state->players[i].name[0] ? state->players[i].name : "Unknown";
-            snprintf(line, sizeof(line), "%s (ID %d): Score %d\n",
-                     name, i, state->players[i].score);
+            snprintf(line, sizeof(line), "%s (ID %d): Total Score %d | Score This Round %d\n",
+                     name, i, state->players[i].score, state->players[i].roundScore);
             strncat(scoreMsg, line, sizeof(scoreMsg) - strlen(scoreMsg) - 1);
         }
     }
@@ -282,10 +278,6 @@ static void sendBoardStateToAllWithMessage(SharedGameState *state, const char *m
     strncat(serverMsg, scoreMsg, sizeof(serverMsg) - strlen(serverMsg) - 1);
     strncat(serverMsg, turnMsg, sizeof(serverMsg) - strlen(serverMsg) - 1);
     printf("%s", serverMsg);
-    if (message && message[0] != '\0')
-    {
-        printf("\n%s\n", message);
-    }
 }
 
 static void printScoreboard(SharedGameState *state)
@@ -297,7 +289,7 @@ static void printScoreboard(SharedGameState *state)
         if (state->players[i].connected)
         {
             const char *name = state->players[i].name[0] ? state->players[i].name : "Unknown";
-            printf("%s (ID %d): Score %d\n", name, i, state->players[i].score);
+            printf("%s (ID %d): Total Score %d | Score This Round %d\n",name,i,state->players[i].score,state->players[i].roundScore);
         }
     }
     printf("==================\n\n");
@@ -327,7 +319,6 @@ void *gameLoopThread(void *arg)
 {
     SharedGameState *state = (SharedGameState *)arg;
     bool boardInitialized = false;
-    printf("Game thread started: TID=%lu\n", pthread_self());
 
     while (1)
     {
@@ -340,14 +331,41 @@ void *gameLoopThread(void *arg)
         pthread_mutex_lock(&state->mutex);
         int current = state->currentTurn;
         bool gameStarted = state->gameStarted;
+        bool broadcastStop = state->boardNeedsBroadcast;
+        if (broadcastStop)
+            state->boardNeedsBroadcast = false;
         pthread_mutex_unlock(&state->mutex);
+
+        if (broadcastStop && !gameStarted)
+        {
+            const char *notify = "GAME_STOPPED\nWaiting for players...\nPlease type 1 to READY.\n<<END>>\n";
+            pthread_mutex_lock(&state->mutex);
+            for (int i = 0; i < MAX_PLAYERS; i++)
+            {
+                if (state->players[i].connected)
+                {
+                    send(state->players[i].socket, notify, strlen(notify), 0);
+                }
+            }
+            pthread_mutex_unlock(&state->mutex);
+        }
         static int firstPick = -1;
 
         if (!gameStarted && boardInitialized)
         {
             boardInitialized = false;
 
-            pushLogEvent(state, LOG_PLAYER, "Game Restarted. Waiting for players.");
+            pushLogEvent(state, LOG_GAME, "Game restarted. Waiting for players.\n");
+            pthread_mutex_lock(&state->mutex);
+            const char *notify = "GAME_STOPPED\nWaiting for players...\nPlease type 1 to READY.\n<<END>>\n";
+            for (int i = 0; i < MAX_PLAYERS; i++)
+            {
+                if (state->players[i].connected)
+                {
+                    send(state->players[i].socket, notify, strlen(notify), 0);
+                }
+            }
+            pthread_mutex_unlock(&state->mutex);
             printf("Connected players:\n");
             pthread_mutex_lock(&state->mutex);
             for (int i = 0; i < MAX_PLAYERS; i++)
@@ -368,6 +386,7 @@ void *gameLoopThread(void *arg)
             boardInitialized = true;
 
             printf("Game Started!\n");
+            pushLogEvent(state, LOG_GAME, "Game started.\n");
             const char *startMsg = "\nGAME STARTED\n<<END>>\n";
             pthread_mutex_lock(&state->mutex);
             for (int i = 0; i < MAX_PLAYERS; i++)
@@ -419,16 +438,10 @@ void *gameLoopThread(void *arg)
                 pthread_mutex_unlock(&state->mutex);
 
                 char logMsg[LOG_MSG_LENGTH];
-                snprintf(logMsg, LOG_MSG_LENGTH,
-                         "Player %d flipped Card %d (Value: %d)\n",
-                         current,
-                         flippedIndex,
-                         flippedCard->faceValue);
+                snprintf(logMsg, LOG_MSG_LENGTH,"Player %d flipped Card %d (Value: %d)\n",current,flippedIndex,flippedCard->faceValue);
                 pushLogEvent(state, LOG_GAME, logMsg);
                 char notifyMsg[256];
-                snprintf(notifyMsg, sizeof(notifyMsg),
-                         "Player %d flipped card %d (Value: %d)",
-                         current, flippedIndex, flippedCard->faceValue);
+                snprintf(notifyMsg, sizeof(notifyMsg),"Player %d flipped card %d (Value: %d)",current,flippedIndex,flippedCard->faceValue);
                 sendBoardStateToAllWithMessage(state, notifyMsg);
             }
             if (flipsDone == 2) 
@@ -452,54 +465,31 @@ void *gameLoopThread(void *arg)
                     secondCard->isMatched = true;
                     state->matchedPaires++;
                     state->players[current].score++;
+                    state->players[current].roundScore++;
                     pthread_mutex_unlock(&state->mutex);
-                    printf("Player %d found a match! Total score: %d\n",
-                           current,
-                           state->players[current].score);
+                          printf("Player %d found a match! Total score: %d\n",current,state->players[current].score);
                     fflush(stdout);
                     char logMsg[LOG_MSG_LENGTH];
-                    snprintf(logMsg, LOG_MSG_LENGTH,
-                             "Player %d found a match: Card %d and Card %d (Value: %d)\n",
-                             current,
-                             firstCardIndex,
-                             secondCardIndex,
-                             firstCard->faceValue);
+                    snprintf(logMsg, LOG_MSG_LENGTH,"Player %d found a match: Card %d and Card %d (Value: %d)\n",current,firstCardIndex,secondCardIndex,firstCard->faceValue);
                     pushLogEvent(state, LOG_GAME, logMsg);
 
-                    snprintf(logMsg, LOG_MSG_LENGTH,
-                             "Player %d score updated: Round %d\n",
-                             current,
-                             state->players[current].score);
+                    snprintf(logMsg, LOG_MSG_LENGTH,"Player %d score updated: Round %d\n",current,state->players[current].score);
                     pushLogEvent(state, LOG_GAME, logMsg);
 
                     printScoreboard(state);
 
                     char notifyMsg[256];
-                    snprintf(notifyMsg, sizeof(notifyMsg),
-                             "Player %d flipped card %d (Value: %d)\nPlayer %d flipped card %d (Value: %d)\nCards %d and %d match",
-                             current, firstCardIndex, firstCard->faceValue,
-                             current, secondCardIndex, secondCard->faceValue,
-                             firstCardIndex, secondCardIndex);
+                    snprintf(notifyMsg, sizeof(notifyMsg),"Player %d flipped card %d (Value: %d)\nPlayer %d flipped card %d (Value: %d)\nCards %d and %d match",current,firstCardIndex,firstCard->faceValue,current,secondCardIndex,secondCard->faceValue,firstCardIndex,secondCardIndex);
                     sendBoardStateToAllWithMessage(state, notifyMsg);
                 }
                 else
                 {
                     char logMsg[LOG_MSG_LENGTH];
-                    snprintf(logMsg, LOG_MSG_LENGTH,
-                             "Player %d did not match: Card %d and Card %d (Values: %d, %d)\n",
-                             current,
-                             firstCardIndex,
-                             secondCardIndex,
-                             firstCard->faceValue,
-                             secondCard->faceValue);
+                    snprintf(logMsg, LOG_MSG_LENGTH,"Player %d did not match: Card %d and Card %d (Values: %d, %d)\n",current,firstCardIndex,secondCardIndex,firstCard->faceValue,secondCard->faceValue);
                     pushLogEvent(state, LOG_GAME, logMsg);
 
                     char notifyMsg[256];
-                    snprintf(notifyMsg, sizeof(notifyMsg),
-                             "Player %d flipped card %d (Value: %d)\nPlayer %d flipped card %d (Value: %d)\nCards %d and %d not match",
-                             current, firstCardIndex, firstCard->faceValue,
-                             current, secondCardIndex, secondCard->faceValue,
-                             firstCardIndex, secondCardIndex);
+                    snprintf(notifyMsg, sizeof(notifyMsg),"Player %d flipped card %d (Value: %d)\nPlayer %d flipped card %d (Value: %d)\nCards %d and %d not match",current,firstCardIndex,firstCard->faceValue,current,secondCardIndex,secondCard->faceValue,firstCardIndex,secondCardIndex);
                     sendBoardStateToAllWithMessage(state, notifyMsg);
 
                     usleep(2000000);

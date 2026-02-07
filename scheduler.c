@@ -14,7 +14,6 @@ void* schedulerLoopThread(void *arg){
     SharedGameState *gameState = (SharedGameState*) arg;
     char logMessage[LOG_MSG_LENGTH];
 
-    printf("Scheduler thread started: TID=%lu\n", pthread_self());
     while(serverRunning){   
         sem_wait(&gameState->turnCompleteSemaphore);
         if(!serverRunning)
@@ -46,10 +45,39 @@ void* schedulerLoopThread(void *arg){
             winnerName[PLAYER_NAME_LENGTH - 1] = '\0';
             pthread_mutex_unlock(&gameState->mutex);
 
+            int maxScore = -1;
+            int winners[MAX_PLAYERS];
+            int winnerCount = 0;
+
+            pthread_mutex_lock(&gameState->mutex);
+            for (int i = 0; i < MAX_PLAYERS; i++)
+            {
+                if (!gameState->players[i].connected)
+                    continue;
+                int s = gameState->players[i].roundScore;
+                if (s > maxScore)
+                {
+                    maxScore = s;
+                    winnerCount = 0;
+                    winners[winnerCount++] = i;
+                }
+                else if (s == maxScore)
+                {
+                    winners[winnerCount++] = i;
+                }
+            }
+            pthread_mutex_unlock(&gameState->mutex);
+
             scores_save(gameState);
 
-            snprintf(logMessage, LOG_MSG_LENGTH,
-                     "Game ended. Player %s score saved.\n", winnerName);
+            if (winnerCount == 1)
+            {
+                snprintf(logMessage, LOG_MSG_LENGTH,"Game ended. Winner: %s (Round Score %d).\n",winnerName,maxScore);
+            }
+            else
+            {
+                snprintf(logMessage, LOG_MSG_LENGTH,"Game ended. Draw with round score %d.\n",maxScore);
+            }
             pushLogEvent(gameState, LOG_GAME, logMessage);
 
             resetGameState(gameState);
@@ -57,9 +85,31 @@ void* schedulerLoopThread(void *arg){
             pushLogEvent(gameState, LOG_GAME,
                          "Game reset. Starting new round.\n");
             pthread_mutex_lock(&gameState->mutex);
-            char notify[512];
-            snprintf(notify, sizeof(notify),
-                     "GAME_STOPPED\nAll pairs matched. Please type 1 to READY.\n<<END>>\n");
+            char notify[1024];
+            char result[256];
+            if (winnerCount == 1)
+            {
+                snprintf(result, sizeof(result),"Winner: %s (Round Score %d)\n",winnerName,maxScore);
+            }
+            else
+            {
+                result[0] = '\0';
+                strncat(result, "Draw between: ", sizeof(result) - strlen(result) - 1);
+                for (int i = 0; i < winnerCount; i++)
+                {
+                    int idx = winners[i];
+                    const char *nm = gameState->players[idx].name[0] ? gameState->players[idx].name : "Unknown";
+                    strncat(result, nm, sizeof(result) - strlen(result) - 1);
+                    if (i < winnerCount - 1)
+                    {
+                        strncat(result, ", ", sizeof(result) - strlen(result) - 1);
+                    }
+                }
+                strncat(result, "\n", sizeof(result) - strlen(result) - 1);
+            }
+
+            snprintf(notify, sizeof(notify),"GAME_STOPPED\nAll pairs matched.\n%sPlease type 1 to READY.\n<<END>>\n",result);
+
             for (int i = 0; i < MAX_PLAYERS; i++)
             {
                 if (gameState->players[i].connected)
@@ -68,6 +118,7 @@ void* schedulerLoopThread(void *arg){
                 }
             }
             pthread_mutex_unlock(&gameState->mutex);
+            sem_post(&gameState->flipDoneSemaphore);
             continue;
         }
 
@@ -102,7 +153,7 @@ void* schedulerLoopThread(void *arg){
 
         sendTurnMessage(gameState);
         printf("It's now Player %d's turn.\n", gameState->currentTurn);
-        snprintf(logMessage, LOG_MSG_LENGTH,"It's now Player %d's turn.\n", gameState->currentTurn);
+        snprintf(logMessage, LOG_MSG_LENGTH,"It's now Player %d's turn.\n",gameState->currentTurn);
         
         sem_post(&gameState->turnSemaphore);
 

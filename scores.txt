@@ -1,2 +1,4 @@
-C 3
-T 4
+C 7
+T 7
+CHAI 2
+NEW 2

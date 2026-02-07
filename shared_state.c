@@ -50,6 +50,7 @@ void initCard(SharedGameState *state){
 
 void initGameState(SharedGameState *state){
     state->gameStarted = false;
+    state->boardNeedsBroadcast = false;
     state->playerCount = 0;
     state->currentTurn = -1;
     state->boardRows = 3;
@@ -62,6 +63,7 @@ void initGameState(SharedGameState *state){
     for(int i = 0; i < MAX_PLAYERS; i++){
         state->players[i].playerID = -1;
         state->players[i].score = 0;
+        state->players[i].roundScore = 0;
         state->players[i].name[0] = '\0';
         state->players[i].connected = false;
         state->players[i].wantToJoin = false;
@@ -82,16 +84,17 @@ void resetGameState(SharedGameState *state){
     state->totalPairs = 0;
     state->boardRows = 3;
     state->boardCols = 4;
+    state->boardNeedsBroadcast = false;
 
     for (int i = 0; i < MAX_PLAYERS; i++) {
         if (state->players[i].connected) {
-            state->players[i].score = 0;
             state->players[i].readyToStart = false;
             state->players[i].pendingAction = false;
             state->players[i].flipsDone = 0;
             state->players[i].firstFlipIndex = -1;
             state->players[i].secondFlipIndex = -1;
             state->players[i].waitingNotified = false;
+            state->players[i].roundScore = 0;
         }
     }
 
